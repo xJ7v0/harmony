@@ -1,0 +1,19 @@
+.TH HARMONY 8
+.SH NAME
+harmony \- iptables wrapper for restrictive setups
+.SH SYNOPSIS
+.B harmony
+.IR file...
+.br
+.B harmony
+.IR OPTION
+.SH DESCRIPTION
+.B harmony
+initiate preconfigured function calls used by a config file 
+.SH OPTIONS
+.TP
+.BR \-f
+properly flush everything in iptables and set the deafult policy to drop
+.TP
+.BR \-h
+print help

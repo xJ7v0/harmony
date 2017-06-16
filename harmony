@@ -1,9 +1,7 @@
 #!/bin/bash
 # Description: An easy to use firewall builder for computers using dual nics or just one
 # Dependencies: iptables, arptables
-
-CONFIG_FILE="/root/.config/harmony.conf"
-
+OPT="${1}"
 FLUSH() {
 	iptables -F
 	iptables -X
@@ -256,9 +254,25 @@ SAVE() {
 
 USAGE() {
 
+	echo """
+$(basename $0): - iptables wrapper for restrictive setups
+	Usage: $(basename $0)  file...
+	Usage: $(basename $0)  OPTION
+OPTION
+	-f	properly flush everything in iptables and set the deafult policy to drop
+
+	-h	prin this help message
+"""
+
+	exit 1
 
 }
 
 
+case ${OPT} in
 
-. ${CONFIG_FILE}
+	"-f") FLUSH; exit 0;;
+	"-h") USAGE;;
+	*.conf) . "${1}";;
+
+esac
