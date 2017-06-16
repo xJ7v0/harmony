@@ -14,3 +14,4 @@
 	Test for non router setup
 	Allow updating dns with -s/-d
 	cron jobs
+	add/remove rules on the fly

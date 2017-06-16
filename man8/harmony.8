@@ -9,7 +9,7 @@ harmony \- iptables wrapper for restrictive setups
 .IR OPTION
 .SH DESCRIPTION
 .B harmony
-initiate preconfigured function calls used by a config file 
+initiate preconfigured function calls used by a config file
 .SH OPTIONS
 .TP
 .BR \-f
@@ -17,3 +17,19 @@ properly flush everything in iptables and set the deafult policy to drop
 .TP
 .BR \-h
 print help
+
+.SH VARIABLES
+0 is disable logging
+.br
+1-7 log level used by iptables
+.TP
+.BR LOGGING_PREROUTING
+.TP
+.BR LOGGING_LAN
+.TP
+.BR LOGGING_WAN
+.TP
+.BR LOGGING_FORWARD
+.TP
+.BR LOGGING_POSTROUTING
+
