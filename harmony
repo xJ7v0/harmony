@@ -1,6 +1,6 @@
 #!/bin/bash
 # Description: An easy to use firewall builder for computers using dual nics or just one
-# Dependencies: iptables, arptables
+# Dependencies: iptables, arptables (optional)
 OPT="${1}"
 FLUSH() {
 	iptables -F
@@ -18,17 +18,18 @@ FLUSH() {
 	iptables -P OUTPUT DROP
 	iptables -P FORWARD DROP
 
-	arptables -F
-	arptables -X
-	arptables -t nat -F
-	arptables -t nat -X
-	arptables -t mangle -F
-	arptables -t mangle -X
+	if [ $(which arptables 2>/dev/null) ]; then
+		arptables -F
+		arptables -X
+		arptables -t nat -F
+		arptables -t nat -X
+		arptables -t mangle -F
+		arptables -t mangle -X
 
-	arptables -P INPUT DROP
-	arptables -P OUTPUT DROP
-	arptables -P FORWARD DROP
-
+		arptables -P INPUT DROP
+		arptables -P OUTPUT DROP
+		arptables -P FORWARD DROP
+	fi
 }
 
 PREROUTING_SECURTIY() {
