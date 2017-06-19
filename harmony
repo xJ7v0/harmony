@@ -141,6 +141,7 @@ INPUT() {
 	PORT="${3}"
 	PROTOCOL="${4}"
 	IFACE_IP="$(ip address show ${IFACE} | grep -oP '(?<=inet ).*(?=/)')"
+
 	iptables -A INPUT -i ${IFACE} -p ${PROTOCOL} --dport ${PORT} -s ${IP} -d ${IFACE_IP} -m state --state NEW,ESTABLISHED -j ACCEPT
 	iptables -A OUTPUT -o ${IFACE} -p ${PROTOCOL}  --sport ${PORT} -d ${IP} -s ${IFACE_IP} -m state --state ESTABLISHED -j ACCEPT
 }
@@ -151,7 +152,8 @@ OUTPUT() {
 	IP="${2}"
 	PORT="${3}"
 	PROTOCOL="${4}"
-	IFACE_IP="$(ip address show ${IFACE} | grep -oP '(?<=inet ).*(?=/)')0"
+	IFACE_IP="$(ip address show ${IFACE} | grep -oP '(?<=inet ).*(?=/)')"
+
 	iptables -A OUTPUT -o ${LAN} -p ${PROTOCOL} --dport ${PORT} -s ${LAN_IP} -d ${IFACE_IP} -m state --state NEW,ESTABLISHED -j ACCEPT
 	iptables -A INPUT -i ${LAN} -p ${PROTOCOL} --sport ${PORT} -d ${LAN_IP} -d  ${IFACE_IP} -m state --state ESTABLISHED -j ACCEPT
 }
@@ -170,38 +172,41 @@ FORWARD_NAT() {
 # This allows which user and group on the router can connect to what service
 ACL_SERVICES() {
 	IFACE="${1}"
-	SRC_IP="${2}"
-	DST_IP="${3}"
-	PORT="${4}"
-	USER="${5}"
-	GROUP="${6}"
-	PROTOCOL="${7}"
-	iptables -A OUTPUT -o ${IFACE} -p ${PROTOCOL} --dport ${PORT} -s ${SRC_IP} -d ${DST_IP} -m owner --uid-owner ${USER} -m owner --gid-owner ${GROUP} -m state --state NEW,ESTABLISHED -j ACCEPT
-	iptables -A INPUT -i ${IFACE} -p ${PROTOCOL} --sport ${PORT} -d ${SRC_IP} -s ${DST_IP} -m state --state ESTABLISHED -j ACCEPT
+	IP="${2}"
+	PORT="${3}"
+	USER="${4}"
+	GROUP="${5}"
+	PROTOCOL="${6}"
+	IFACE_IP="$(ip address show ${IFACE} | grep -oP '(?<=inet ).*(?=/)')"
+
+	iptables -A OUTPUT -o ${IFACE} -p ${PROTOCOL} --dport ${PORT} -s ${IFACE_IP} -d ${IP} -m owner --uid-owner ${USER} -m owner --gid-owner ${GROUP} -m state --state NEW,ESTABLISHED -j ACCEPT
+	iptables -A INPUT -i ${IFACE} -p ${PROTOCOL} --sport ${PORT} -d ${IFACE_IP} -s ${IP} -m state --state ESTABLISHED -j ACCEPT
 }
 
 # This allows which group on the router can connect to what service
 ACL_SERVICES_GROUP() {
 	IFACE="${1}"
-	SRC_IP="${2}"
-	DST_IP="${3}"
-	PORT="${4}"
-	GROUP="${5}"
-	PROTOCOL="${6}"
-	iptables -A OUTPUT -o ${IFACE} -p ${PROTOCOL} --dport ${PORT} -s ${SRC_IP} -d ${DST_IP} -m owner --gid-owner ${GROUP} -m state --state NEW,ESTABLISHED -j ACCEPT
-	iptables -A INPUT -i ${IFACE} -p ${PROTOCOL} --sport ${PORT} -d ${SRC_IP} -s ${DST_IP} -m state --state ESTABLISHED -j ACCEPT
+	IP="${2}"
+	PORT="${3}"
+	GROUP="${4}"
+	PROTOCOL="${5}"
+	IFACE_IP="$(ip address show ${IFACE} | grep -oP '(?<=inet ).*(?=/)')"
+
+	iptables -A OUTPUT -o ${IFACE} -p ${PROTOCOL} --dport ${PORT} -s ${IFACE_IP} -d ${IP} -m owner --gid-owner ${GROUP} -m state --state NEW,ESTABLISHED -j ACCEPT
+	iptables -A INPUT -i ${IFACE} -p ${PROTOCOL} --sport ${PORT} -d ${IFACE_IP} -s ${IP} -m state --state ESTABLISHED -j ACCEPT
 }
 
 # This allows which user on the router can connect to what service
 ACL_SERVICES_USER() {
 	IFACE="${1}"
-	SRC_IP="${2}"
-	DST_IP="${3}"
-	PORT="${4}"
-	USER="${5}"
-	PROTOCOL="${6}"
-	iptables -A OUTPUT -o ${IFACE} -p ${PROTOCOL} --dport ${PORT} -s ${SRC_IP} -d ${DST_IP} -m owner --uid-owner ${USER} -m state --state NEW,ESTABLISHED -j ACCEPT
-	iptables -A INPUT -i ${IFACE} -p ${PROTOCOL} --sport ${PORT} -d ${SRC_IP} -s ${DST_IP} -m state --state ESTABLISHED -j ACCEPT
+	IP="${2}"
+	PORT="${3}"
+	USER="${4}"
+	PROTOCOL="${5}"
+	IFACE_IP="$(ip address show ${IFACE} | grep -oP '(?<=inet ).*(?=/)')"
+
+	iptables -A OUTPUT -o ${IFACE} -p ${PROTOCOL} --dport ${PORT} -s ${IFACE_IP} -d ${IP} -m owner --uid-owner ${USER} -m state --state NEW,ESTABLISHED -j ACCEPT
+	iptables -A INPUT -i ${IFACE} -p ${PROTOCOL} --sport ${PORT} -d ${IFACE_IP} -s ${IP} -m state --state ESTABLISHED -j ACCEPT
 }
 
 LOG(){
@@ -264,7 +269,7 @@ $(basename $0): - iptables wrapper for restrictive setups
 OPTION
 	-f	properly flush everything in iptables and set the deafult policy to drop
 
-	-h	prin this help message
+	-h	print this help message
 """
 
 	exit 1
