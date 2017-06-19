@@ -33,3 +33,21 @@ print help
 .TP
 .BR LOGGING_POSTROUTING
 
+.SH FUNCTIONS
+.BR FLUSH():
+.TP 4
+Flushes everything in iptables, could affect other defined chains not used by harmony
+.TP
+.BR PREROUTING_SECURTIY():
+.TP 4
+Experimental function to harden the firewall
+.TP
+.BR DEFAULT_LO():
+.TP 4
+Sets the lo interface to ACCEPT from anywhere to anywhere
+.TP
+.BR INPUT():
+        IFACE="${1}"	- The interface. Example: eth0, eth1, wlan0, etc.
+        IP="${2}"	- The ip you want to allow connections from. Example: 192.168.1.5
+        PORT="${3}"	- The port you want to match to allow connections from. Example 22
+        PROTOCOL="${4}"	- The protocol. Example tcp, udp, etc.
