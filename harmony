@@ -125,33 +125,35 @@ INPUT_FROM_LAN_DHCP() {
 
 }
 
-
-# This allows connections to servers from lan
-INPUT_FROM_LAN() {
+OUTPUT_FROM_WAN_DHCP() {
 	IP="${1}"
-	PORT="${2}"
-	PROTOCOL="${3}"
-	iptables -A INPUT -i ${LAN} -p ${PROTOCOL} --dport ${PORT} -s ${IP} -d ${LAN_IP} -m state --state NEW,ESTABLISHED -j ACCEPT
-	iptables -A OUTPUT -o ${LAN} -p ${PROTOCOL}  --sport ${PORT} -d ${IP} -s ${LAN_IP} -m state --state ESTABLISHED -j ACCEPT
+	MAC="${2}"
+	iptables -A OUTPUT -o ${WAN} -p udp --dport 67:68 -s ${WAN_IP} -d ${IP} -j ACCEPT
+	iptables -A INPUT -i ${WAN} -p udp --sport 67:68 -m mac --mac-source ${MAC} -j ACCEPT
+
 }
 
-# This allows the router to connect to other servers hosted on the lan
-OUTPUT_TO_LAN() {
-	IP="${1}"
-	PORT="${2}"
-	PROTOCOL="${3}"
-	iptables -A OUTPUT -o ${LAN} -p ${PROTOCOL} --dport ${PORT} -s ${LAN_IP} -d ${IP} -m state --state NEW,ESTABLISHED -j ACCEPT
-	iptables -A INPUT -i ${LAN} -p ${PROTOCOL} --sport ${PORT} -d ${LAN_IP} -d  ${IP} -m state --state ESTABLISHED -j ACCEPT
+
+# This allows connections to servers from any interface
+INPUT() {
+	IFACE="${1}"
+	IP="${2}"
+	PORT="${3}"
+	PROTOCOL="${4}"
+	IFACE_IP="$(ip address show ${IFACE} | grep -oP '(?<=inet ).*(?=/)')"
+	iptables -A INPUT -i ${IFACE} -p ${PROTOCOL} --dport ${PORT} -s ${IP} -d ${IFACE_IP} -m state --state NEW,ESTABLISHED -j ACCEPT
+	iptables -A OUTPUT -o ${IFACE} -p ${PROTOCOL}  --sport ${PORT} -d ${IP} -s ${IFACE_IP} -m state --state ESTABLISHED -j ACCEPT
 }
 
-# This allows the router to accept connections for servers on the wan
-INPUT_FROM_WAN() {
-        IP="${1}"
-	PORT="${2}"
-	PROTOCOL="${3}"
-	iptables -A INPUT -i ${WAN} -p ${PROTOCOL} --dport ${PORT} -d ${WAN_IP} -m state --state NEW,ESTABLISHED -j ACCEPT
-	iptables -A OUTPUT -o ${WAN} -p ${PROTOCL} --sport ${PORT} -s ${WAN_IP} -m state --state ESTABLISHED -j ACCEPT
-
+# This allows the router to connect to other servers from any interface
+OUTPUT() {
+	IFACE="${1}"
+	IP="${2}"
+	PORT="${3}"
+	PROTOCOL="${4}"
+	IFACE_IP="$(ip address show ${IFACE} | grep -oP '(?<=inet ).*(?=/)')0"
+	iptables -A OUTPUT -o ${LAN} -p ${PROTOCOL} --dport ${PORT} -s ${LAN_IP} -d ${IFACE_IP} -m state --state NEW,ESTABLISHED -j ACCEPT
+	iptables -A INPUT -i ${LAN} -p ${PROTOCOL} --sport ${PORT} -d ${LAN_IP} -d  ${IFACE_IP} -m state --state ESTABLISHED -j ACCEPT
 }
 
 
