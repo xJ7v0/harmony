@@ -47,7 +47,8 @@ Experimental function to harden the firewall
 Sets the lo interface to ACCEPT from anywhere to anywhere
 .TP
 .BR INPUT():
-        IFACE="${1}"	- The interface. Example: eth0, eth1, wlan0, etc.
-        IP="${2}"	- The ip you want to allow connections from. Example: 192.168.1.5
-        PORT="${3}"	- The port you want to match to allow connections from. Example 22
-        PROTOCOL="${4}"	- The protocol. Example tcp, udp, etc.
+	IFACE="${1}"	- Required. The interface. Example: eth0, eth1, wlan0, etc.
+	IP="${2}"	- Required. The ip you want to allow connections from. Example: 192.168.1.5
+	PORT="${3}"	- Required. The port you want to match to allow connections from. Example: 22, 67:68
+	PROTOCOL="${4}"	- Required. The protocol. Example: tcp, udp, etc.
+	MAC="${5}"	- Optional. The Mac address you want to match to allow connections from. Example: aa:bb:cc:dd:ee:ff

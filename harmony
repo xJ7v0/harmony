@@ -111,20 +111,6 @@ DEFAULT_LO() {
 
 #}
 
-# A special function for dhcp, will replace
-INPUT_FROM_LAN_DHCP() {
-	OLD_IFS=${IFS}
-	IFS=$'\n'
-	for i in $(cat /etc/ethers); do
-		MAC=$(echo "${i}" | cut -d " " -f1)
-		IP=$(echo "${i}" | cut -d " " -f2)
-		iptables -A INPUT -i ${LAN} -p udp --dport 67:68 --sport 67:68 -m mac --mac-source ${MAC} -j ACCEPT
-		iptables -A OUTPUT -o ${LAN} -p udp --dport 67:68 -s ${LAN_IP} -d ${IP} -j ACCEPT
-	done
-	IFS=${OLD_IFS}
-
-}
-
 OUTPUT_FROM_WAN_DHCP() {
 	IP="${1}"
 	MAC="${2}"
@@ -142,8 +128,15 @@ INPUT() {
 	PROTOCOL="${4}"
 	IFACE_IP="$(ip address show ${IFACE} | grep -oP '(?<=inet ).*(?=/)')"
 
-	iptables -A INPUT -i ${IFACE} -p ${PROTOCOL} --dport ${PORT} -s ${IP} -d ${IFACE_IP} -m state --state NEW,ESTABLISHED -j ACCEPT
-	iptables -A OUTPUT -o ${IFACE} -p ${PROTOCOL}  --sport ${PORT} -d ${IP} -s ${IFACE_IP} -m state --state ESTABLISHED -j ACCEPT
+	if [ ! -z ${5} ]; then
+		MAC="${5}"
+		IFACE_MAC="$(ip address show ${IFACE} | grep -oP '(?<=ether ).*(?= brd)')"
+		iptables -A INPUT -i ${IFACE} -p ${PROTOCOL} --dport ${PORT} -s ${IP} -d ${IFACE_IP} -m mac --mac-source ${MAC} -m state --state NEW,ESTABLISHED -j ACCEPT
+		iptables -A OUTPUT -o ${IFACE} -p ${PROTOCOL}  --sport ${PORT} -d ${IP} -s ${IFACE_IP} -m mac --mac-source ${IFACE_MAC} -m state --state ESTABLISHED -j ACCEPT
+	else
+		iptables -A INPUT -i ${IFACE} -p ${PROTOCOL} --dport ${PORT} -s ${IP} -d ${IFACE_IP} -m state --state NEW,ESTABLISHED -j ACCEPT
+		iptables -A OUTPUT -o ${IFACE} -p ${PROTOCOL}  --sport ${PORT} -d ${IP} -s ${IFACE_IP} -m state --state ESTABLISHED -j ACCEPT
+	fi
 }
 
 # This allows the router to connect to other servers from any interface
