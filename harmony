@@ -263,6 +263,11 @@ OPTION
 	-f	properly flush everything in iptables and set the deafult policy to drop
 
 	-h	print this help message
+
+FUNCTIONS
+$(for i in $(declare -F | cut -d ' ' -f3);do echo -e '\t'${i}'  '$(declare -f ${i} | grep \=\"\$\{.*\}) |\
+sed 's/\s\s\+/:/g;s/\([a-z)]\)\s\([(0-9A]\)/\1:\2/g';done | column -s: -t)
+
 """
 
 	exit 1
