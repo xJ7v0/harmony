@@ -111,15 +111,6 @@ DEFAULT_LO() {
 
 #}
 
-OUTPUT_FROM_WAN_DHCP() {
-	IP="${1}"
-	MAC="${2}"
-	iptables -A OUTPUT -o ${WAN} -p udp --dport 67:68 -s ${WAN_IP} -d ${IP} -j ACCEPT
-	iptables -A INPUT -i ${WAN} -p udp --sport 67:68 -m mac --mac-source ${MAC} -j ACCEPT
-
-}
-
-
 # This allows connections to servers from any interface
 INPUT() {
 	IFACE="${1}"
@@ -135,7 +126,7 @@ INPUT() {
 		iptables -A OUTPUT -o ${IFACE} -p ${PROTOCOL}  --sport ${PORT} -d ${IP} -s ${IFACE_IP} -m mac --mac-source ${IFACE_MAC} -m state --state ESTABLISHED -j ACCEPT
 	else
 		iptables -A INPUT -i ${IFACE} -p ${PROTOCOL} --dport ${PORT} -s ${IP} -d ${IFACE_IP} -m state --state NEW,ESTABLISHED -j ACCEPT
-		iptables -A OUTPUT -o ${IFACE} -p ${PROTOCOL}  --sport ${PORT} -d ${IP} -s ${IFACE_IP} -m state --state ESTABLISHED -j ACCEPT
+		iptables -A OUTPUT -o ${IFACE} -p ${PROTOCOL} --sport ${PORT} -d ${IP} -s ${IFACE_IP} -m state --state ESTABLISHED -j ACCEPT
 	fi
 }
 
@@ -147,8 +138,15 @@ OUTPUT() {
 	PROTOCOL="${4}"
 	IFACE_IP="$(ip address show ${IFACE} | grep -oP '(?<=inet ).*(?=/)')"
 
-	iptables -A OUTPUT -o ${LAN} -p ${PROTOCOL} --dport ${PORT} -s ${LAN_IP} -d ${IFACE_IP} -m state --state NEW,ESTABLISHED -j ACCEPT
-	iptables -A INPUT -i ${LAN} -p ${PROTOCOL} --sport ${PORT} -d ${LAN_IP} -d  ${IFACE_IP} -m state --state ESTABLISHED -j ACCEPT
+	if [ ! -z ${5} ]; then
+		MAC="${5}"
+		IFACE_MAC="$(ip address show ${IFACE} | grep -oP '(?<=ether ).*(?= brd)')"
+		iptables -A OUTPUT -o ${LAN} -p ${PROTOCOL} --dport ${PORT} -s ${LAN_IP} -d ${IFACE_IP} -m mac --mac-source ${IFACE_MAC} -m state --state NEW,ESTABLISHED -j ACCEPT
+		iptables -A INPUT -i ${LAN} -p ${PROTOCOL} --sport ${PORT} -d ${LAN_IP} -d  ${IFACE_IP} -m mac --mac-source ${MAC} -m state --state ESTABLISHED -j ACCEPT
+	else
+		iptables -A OUTPUT -o ${LAN} -p ${PROTOCOL} --dport ${PORT} -s ${LAN_IP} -d ${IFACE_IP} -m state --state NEW,ESTABLISHED -j ACCEPT
+		iptables -A INPUT -i ${LAN} -p ${PROTOCOL} --sport ${PORT} -d ${LAN_IP} -d  ${IFACE_IP} -m state --state ESTABLISHED -j ACCEPT
+	fi
 }
 
 
@@ -267,6 +265,10 @@ OPTION
 FUNCTIONS
 $(for i in $(declare -F | cut -d ' ' -f3);do echo -e '\t'${i}'  '$(declare -f ${i} | grep \=\"\$\{.*\}) |\
 sed 's/\s\s\+/:/g;s/\([a-z)]\)\s\([(0-9A]\)/\1:\2/g';done | column -s: -t)
+
+ARGUMENTS
+	IFACE: interface, eth0, eth1, etc.
+
 
 """
 
