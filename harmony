@@ -121,13 +121,13 @@ INPUT() {
 
 	if [ ! -z ${5} ]; then
 		MAC="${5}"
-		IFACE_MAC="$(ip address show ${IFACE} | grep -oP '(?<=ether ).*(?= brd)')"
 		iptables -A INPUT -i ${IFACE} -p ${PROTOCOL} --dport ${PORT} -s ${IP} -d ${IFACE_IP} -m mac --mac-source ${MAC} -m state --state NEW,ESTABLISHED -j ACCEPT
-		iptables -A OUTPUT -o ${IFACE} -p ${PROTOCOL}  --sport ${PORT} -d ${IP} -s ${IFACE_IP} -m mac --mac-source ${IFACE_MAC} -m state --state ESTABLISHED -j ACCEPT
 	else
 		iptables -A INPUT -i ${IFACE} -p ${PROTOCOL} --dport ${PORT} -s ${IP} -d ${IFACE_IP} -m state --state NEW,ESTABLISHED -j ACCEPT
-		iptables -A OUTPUT -o ${IFACE} -p ${PROTOCOL} --sport ${PORT} -d ${IP} -s ${IFACE_IP} -m state --state ESTABLISHED -j ACCEPT
 	fi
+
+	iptables -A OUTPUT -o ${IFACE} -p ${PROTOCOL}  --sport ${PORT} -d ${IP} -s ${IFACE_IP} -m state --state ESTABLISHED -j ACCEPT
+
 }
 
 # This allows the router to connect to other servers from any interface
@@ -140,13 +140,13 @@ OUTPUT() {
 
 	if [ ! -z ${5} ]; then
 		MAC="${5}"
-		IFACE_MAC="$(ip address show ${IFACE} | grep -oP '(?<=ether ).*(?= brd)')"
-		iptables -A OUTPUT -o ${LAN} -p ${PROTOCOL} --dport ${PORT} -s ${LAN_IP} -d ${IFACE_IP} -m mac --mac-source ${IFACE_MAC} -m state --state NEW,ESTABLISHED -j ACCEPT
 		iptables -A INPUT -i ${LAN} -p ${PROTOCOL} --sport ${PORT} -d ${LAN_IP} -d  ${IFACE_IP} -m mac --mac-source ${MAC} -m state --state ESTABLISHED -j ACCEPT
 	else
-		iptables -A OUTPUT -o ${LAN} -p ${PROTOCOL} --dport ${PORT} -s ${LAN_IP} -d ${IFACE_IP} -m state --state NEW,ESTABLISHED -j ACCEPT
 		iptables -A INPUT -i ${LAN} -p ${PROTOCOL} --sport ${PORT} -d ${LAN_IP} -d  ${IFACE_IP} -m state --state ESTABLISHED -j ACCEPT
 	fi
+
+	iptables -A OUTPUT -o ${LAN} -p ${PROTOCOL} --dport ${PORT} -s ${LAN_IP} -d ${IFACE_IP} -m state --state NEW,ESTABLISHED -j ACCEPT
+
 }
 
 
