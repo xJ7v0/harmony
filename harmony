@@ -36,7 +36,7 @@ FLUSH() {
 		arptables -P FORWARD DROP
 	fi
 
-	if [ ! -f ${DNS_FILE} ];
+#	if [ ! -f ${DNS_FILE} ];
 
 
 }
@@ -120,10 +120,10 @@ DEFAULT_LO() {
 
 #}
 
-ACL_DNS() {
-	if [ ! -d $(dirname "${DNS_FILE}") ]; then
-		mkdir -p $(dirname "${DNS_FILE}"
-}
+#ACL_DNS() {
+#	if [ ! -d $(dirname "${DNS_FILE}") ]; then
+#		mkdir -p $(dirname "${DNS_FILE}"
+#}
 
 # This allows connections to servers from any interface
 INPUT() {
@@ -131,9 +131,10 @@ INPUT() {
 	IP="${2}"
 	PORT="${3}"
 	PROTOCOL="${4}"
-	IFACE_IP="$(ip address show ${IFACE} | grep -oP '(?<=inet ).*(?=/)')"
 
 	for i in ${IFACE}; do
+		IFACE_IP="$(ip address show ${i} | grep -oP '(?<=inet ).*(?=/)')"
+
 		if [ ! -z ${5} ]; then
 			MAC="${5}"
 			iptables -A INPUT -i ${i} -p ${PROTOCOL} --dport ${PORT} -s ${IP} -d ${IFACE_IP} -m mac --mac-source ${MAC} -m state --state NEW,ESTABLISHED -j ACCEPT
@@ -152,8 +153,10 @@ OUTPUT() {
 	IP="${2}"
 	PORT="${3}"
 	PROTOCOL="${4}"
-	IFACE_IP="$(ip address show ${IFACE} | grep -oP '(?<=inet ).*(?=/)')"
+
 	for i in ${IFACE}; do
+		IFACE_IP="$(ip address show ${i} | grep -oP '(?<=inet ).*(?=/)')"
+
 		if [ ! -z ${5} ]; then
 			MAC="${5}"
 			iptables -A INPUT -i ${i} -p ${PROTOCOL} --sport ${PORT} -d ${LAN_IP} -d  ${IFACE_IP} -m mac --mac-source ${MAC} -m state --state ESTABLISHED -j ACCEPT
@@ -163,6 +166,7 @@ OUTPUT() {
 			iptables -A OUTPUT -o ${i} -p ${PROTOCOL} --dport ${PORT} -s ${LAN_IP} -d ${IFACE_IP} -m state --state NEW,ESTABLISHED -j ACCEPT
 
 		fi
+	done
 }
 
 
