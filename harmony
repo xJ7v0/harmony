@@ -2,6 +2,11 @@
 # Description: An easy to use firewall builder for computers using dual nics or just one
 # Dependencies: iptables, arptables (optional)
 OPT="${1}"
+
+if [ ! -z ${DNS_FILE} ]; then
+	DNS_FILE="/root/.config/harmony/dns"
+fi
+
 FLUSH() {
 	iptables -F
 	iptables -X
@@ -30,6 +35,10 @@ FLUSH() {
 		arptables -P OUTPUT DROP
 		arptables -P FORWARD DROP
 	fi
+
+	if [ ! -f ${DNS_FILE} ];
+
+
 }
 
 PREROUTING_SECURTIY() {
@@ -111,6 +120,11 @@ DEFAULT_LO() {
 
 #}
 
+ACL_DNS() {
+	if [ ! -d $(dirname "${DNS_FILE}") ]; then
+		mkdir -p $(dirname "${DNS_FILE}"
+}
+
 # This allows connections to servers from any interface
 INPUT() {
 	IFACE="${1}"
@@ -119,15 +133,17 @@ INPUT() {
 	PROTOCOL="${4}"
 	IFACE_IP="$(ip address show ${IFACE} | grep -oP '(?<=inet ).*(?=/)')"
 
-	if [ ! -z ${5} ]; then
-		MAC="${5}"
-		iptables -A INPUT -i ${IFACE} -p ${PROTOCOL} --dport ${PORT} -s ${IP} -d ${IFACE_IP} -m mac --mac-source ${MAC} -m state --state NEW,ESTABLISHED -j ACCEPT
-	else
-		iptables -A INPUT -i ${IFACE} -p ${PROTOCOL} --dport ${PORT} -s ${IP} -d ${IFACE_IP} -m state --state NEW,ESTABLISHED -j ACCEPT
-	fi
+	for i in ${IFACE}; do
+		if [ ! -z ${5} ]; then
+			MAC="${5}"
+			iptables -A INPUT -i ${i} -p ${PROTOCOL} --dport ${PORT} -s ${IP} -d ${IFACE_IP} -m mac --mac-source ${MAC} -m state --state NEW,ESTABLISHED -j ACCEPT
+			iptables -A OUTPUT -o ${i} -p ${PROTOCOL}  --sport ${PORT} -d ${IP} -s ${IFACE_IP} -m state --state ESTABLISHED -j ACCEPT
+		else
+			iptables -A INPUT -i ${i} -p ${PROTOCOL} --dport ${PORT} -s ${IP} -d ${IFACE_IP} -m state --state NEW,ESTABLISHED -j ACCEPT
+			iptables -A OUTPUT -o ${i} -p ${PROTOCOL}  --sport ${PORT} -d ${IP} -s ${IFACE_IP} -m state --state ESTABLISHED -j ACCEPT
 
-	iptables -A OUTPUT -o ${IFACE} -p ${PROTOCOL}  --sport ${PORT} -d ${IP} -s ${IFACE_IP} -m state --state ESTABLISHED -j ACCEPT
-
+		fi
+	done
 }
 
 # This allows the router to connect to other servers from any interface
@@ -137,16 +153,16 @@ OUTPUT() {
 	PORT="${3}"
 	PROTOCOL="${4}"
 	IFACE_IP="$(ip address show ${IFACE} | grep -oP '(?<=inet ).*(?=/)')"
+	for i in ${IFACE}; do
+		if [ ! -z ${5} ]; then
+			MAC="${5}"
+			iptables -A INPUT -i ${i} -p ${PROTOCOL} --sport ${PORT} -d ${LAN_IP} -d  ${IFACE_IP} -m mac --mac-source ${MAC} -m state --state ESTABLISHED -j ACCEPT
+			iptables -A OUTPUT -o ${i} -p ${PROTOCOL} --dport ${PORT} -s ${LAN_IP} -d ${IFACE_IP} -m state --state NEW,ESTABLISHED -j ACCEPT
+		else
+			iptables -A INPUT -i ${i} -p ${PROTOCOL} --sport ${PORT} -d ${LAN_IP} -d  ${IFACE_IP} -m state --state ESTABLISHED -j ACCEPT
+			iptables -A OUTPUT -o ${i} -p ${PROTOCOL} --dport ${PORT} -s ${LAN_IP} -d ${IFACE_IP} -m state --state NEW,ESTABLISHED -j ACCEPT
 
-	if [ ! -z ${5} ]; then
-		MAC="${5}"
-		iptables -A INPUT -i ${LAN} -p ${PROTOCOL} --sport ${PORT} -d ${LAN_IP} -d  ${IFACE_IP} -m mac --mac-source ${MAC} -m state --state ESTABLISHED -j ACCEPT
-	else
-		iptables -A INPUT -i ${LAN} -p ${PROTOCOL} --sport ${PORT} -d ${LAN_IP} -d  ${IFACE_IP} -m state --state ESTABLISHED -j ACCEPT
-	fi
-
-	iptables -A OUTPUT -o ${LAN} -p ${PROTOCOL} --dport ${PORT} -s ${LAN_IP} -d ${IFACE_IP} -m state --state NEW,ESTABLISHED -j ACCEPT
-
+		fi
 }
 
 
@@ -257,16 +273,18 @@ USAGE() {
 $(basename $0): - iptables wrapper for restrictive setups
 	Usage: $(basename $0)  file...
 	Usage: $(basename $0)  OPTION
-OPTION
+OPTIONS
 	-f	properly flush everything in iptables and set the deafult policy to drop
 
 	-h	print this help message
+
+	-u	update resolved hostnames
 
 FUNCTIONS
 $(for i in $(declare -F | cut -d ' ' -f3);do echo -e '\t'${i}'  '$(declare -f ${i} | grep \=\"\$\{.*\}) |\
 sed 's/\s\s\+/:/g;s/\([a-z)]\)\s\([(0-9A]\)/\1:\2/g';done | column -s: -t)
 
-ARGUMENTS
+ARGUMENTS TO FUNCTIONS
 	IFACE: interface, eth0, eth1, etc.
 
 
@@ -281,6 +299,7 @@ case ${OPT} in
 
 	"-f") FLUSH; exit 0;;
 	"-h") USAGE;;
+	"-u") UPDATE_DNS;;
 	*.conf) . "${1}";;
 
 esac
