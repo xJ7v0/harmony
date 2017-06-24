@@ -131,17 +131,17 @@ INPUT() {
 	IP="${2}"
 	PORT="${3}"
 	PROTOCOL="${4}"
-
-	for i in ${IFACE}; do
-		IFACE_IP="$(ip address show ${i} | grep -oP '(?<=inet ).*(?=/)')"
+	IFS=" "
+	for interface in ${IFACE}; do
+		IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
 
 		if [ ! -z ${5} ]; then
 			MAC="${5}"
-			iptables -A INPUT -i ${i} -p ${PROTOCOL} --dport ${PORT} -s ${IP} -d ${IFACE_IP} -m mac --mac-source ${MAC} -m state --state NEW,ESTABLISHED -j ACCEPT
-			iptables -A OUTPUT -o ${i} -p ${PROTOCOL}  --sport ${PORT} -d ${IP} -s ${IFACE_IP} -m state --state ESTABLISHED -j ACCEPT
+			iptables -A INPUT -i ${interface} -p ${PROTOCOL} --dport ${PORT} -s ${IP} -d ${IFACE_IP} -m mac --mac-source ${MAC} -m state --state NEW,ESTABLISHED -j ACCEPT
+			iptables -A OUTPUT -o ${interface} -p ${PROTOCOL}  --sport ${PORT} -d ${IP} -s ${IFACE_IP} -m state --state ESTABLISHED -j ACCEPT
 		else
-			iptables -A INPUT -i ${i} -p ${PROTOCOL} --dport ${PORT} -s ${IP} -d ${IFACE_IP} -m state --state NEW,ESTABLISHED -j ACCEPT
-			iptables -A OUTPUT -o ${i} -p ${PROTOCOL}  --sport ${PORT} -d ${IP} -s ${IFACE_IP} -m state --state ESTABLISHED -j ACCEPT
+			iptables -A INPUT -i ${interface} -p ${PROTOCOL} --dport ${PORT} -s ${IP} -d ${IFACE_IP} -m state --state NEW,ESTABLISHED -j ACCEPT
+			iptables -A OUTPUT -o ${interface} -p ${PROTOCOL}  --sport ${PORT} -d ${IP} -s ${IFACE_IP} -m state --state ESTABLISHED -j ACCEPT
 
 		fi
 	done
@@ -153,17 +153,17 @@ OUTPUT() {
 	IP="${2}"
 	PORT="${3}"
 	PROTOCOL="${4}"
-
-	for i in ${IFACE}; do
-		IFACE_IP="$(ip address show ${i} | grep -oP '(?<=inet ).*(?=/)')"
+	IFS=" "
+	for interface in ${IFACE}; do
+		IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
 
 		if [ ! -z ${5} ]; then
 			MAC="${5}"
-			iptables -A INPUT -i ${i} -p ${PROTOCOL} --sport ${PORT} -d ${LAN_IP} -d  ${IFACE_IP} -m mac --mac-source ${MAC} -m state --state ESTABLISHED -j ACCEPT
-			iptables -A OUTPUT -o ${i} -p ${PROTOCOL} --dport ${PORT} -s ${LAN_IP} -d ${IFACE_IP} -m state --state NEW,ESTABLISHED -j ACCEPT
+			iptables -A INPUT -i ${interface} -p ${PROTOCOL} --sport ${PORT} -d ${LAN_IP} -d  ${IFACE_IP} -m mac --mac-source ${MAC} -m state --state ESTABLISHED -j ACCEPT
+			iptables -A OUTPUT -o ${interface} -p ${PROTOCOL} --dport ${PORT} -s ${LAN_IP} -d ${IFACE_IP} -m state --state NEW,ESTABLISHED -j ACCEPT
 		else
-			iptables -A INPUT -i ${i} -p ${PROTOCOL} --sport ${PORT} -d ${LAN_IP} -d  ${IFACE_IP} -m state --state ESTABLISHED -j ACCEPT
-			iptables -A OUTPUT -o ${i} -p ${PROTOCOL} --dport ${PORT} -s ${LAN_IP} -d ${IFACE_IP} -m state --state NEW,ESTABLISHED -j ACCEPT
+			iptables -A INPUT -i ${interface} -p ${PROTOCOL} --sport ${PORT} -d ${LAN_IP} -d  ${IFACE_IP} -m state --state ESTABLISHED -j ACCEPT
+			iptables -A OUTPUT -o ${interface} -p ${PROTOCOL} --dport ${PORT} -s ${LAN_IP} -d ${IFACE_IP} -m state --state NEW,ESTABLISHED -j ACCEPT
 
 		fi
 	done
@@ -285,7 +285,7 @@ OPTIONS
 	-u	update resolved hostnames
 
 FUNCTIONS
-$(for i in $(declare -F | cut -d ' ' -f3);do echo -e '\t'${i}'  '$(declare -f ${i} | grep \=\"\$\{.*\}) |\
+$(for fun in $(declare -F | cut -d ' ' -f3);do echo -e '\t'${fun}'  '$(declare -f ${fun} | grep \=\"\$\{.*\}) |\
 sed 's/\s\s\+/:/g;s/\([a-z)]\)\s\([(0-9A]\)/\1:\2/g';done | column -s: -t)
 
 ARGUMENTS TO FUNCTIONS
