@@ -131,7 +131,8 @@ INPUT() {
 	IP="${2}"
 	PORT="${3}"
 	PROTOCOL="${4}"
-	IFS=" "
+	IFS=' 	
+'
 	for interface in ${IFACE}; do
 		IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
 
@@ -153,7 +154,8 @@ OUTPUT() {
 	IP="${2}"
 	PORT="${3}"
 	PROTOCOL="${4}"
-	IFS=" "
+	IFS=' 	
+'
 	for interface in ${IFACE}; do
 		IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
 
@@ -188,7 +190,8 @@ ACL_SERVICES() {
 	USER="${4}"
 	GROUP="${5}"
 	PROTOCOL="${6}"
-
+	IFS=' 	
+'
 	for interface in ${IFACE}; do
 		IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
 		iptables -A OUTPUT -o ${interface} -p ${PROTOCOL} --dport ${PORT} -s ${IFACE_IP} -d ${IP} -m owner --uid-owner ${USER} -m owner --gid-owner ${GROUP} -m state --state NEW,ESTABLISHED -j ACCEPT
@@ -203,7 +206,8 @@ ACL_SERVICES_GROUP() {
 	PORT="${3}"
 	GROUP="${4}"
 	PROTOCOL="${5}"
-
+	IFS=' 	
+'
 	for interface in ${IFACE}; do
 		IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
 		iptables -A OUTPUT -o ${interface} -p ${PROTOCOL} --dport ${PORT} -s ${IFACE_IP} -d ${IP} -m owner --gid-owner ${GROUP} -m state --state NEW,ESTABLISHED -j ACCEPT
@@ -218,6 +222,8 @@ ACL_SERVICES_USER() {
 	PORT="${3}"
 	USER="${4}"
 	PROTOCOL="${5}"
+	IFS=' 	
+'
 	for interface in ${IFACE}; do
 		IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
 		iptables -A OUTPUT -o ${interface} -p ${PROTOCOL} --dport ${PORT} -s ${IFACE_IP} -d ${IP} -m owner --uid-owner ${USER} -m state --state NEW,ESTABLISHED -j ACCEPT
