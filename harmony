@@ -188,10 +188,12 @@ ACL_SERVICES() {
 	USER="${4}"
 	GROUP="${5}"
 	PROTOCOL="${6}"
-	IFACE_IP="$(ip address show ${IFACE} | grep -oP '(?<=inet ).*(?=/)')"
 
-	iptables -A OUTPUT -o ${IFACE} -p ${PROTOCOL} --dport ${PORT} -s ${IFACE_IP} -d ${IP} -m owner --uid-owner ${USER} -m owner --gid-owner ${GROUP} -m state --state NEW,ESTABLISHED -j ACCEPT
-	iptables -A INPUT -i ${IFACE} -p ${PROTOCOL} --sport ${PORT} -d ${IFACE_IP} -s ${IP} -m state --state ESTABLISHED -j ACCEPT
+	for interface in ${IFACE}; do
+		IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
+		iptables -A OUTPUT -o ${interface} -p ${PROTOCOL} --dport ${PORT} -s ${IFACE_IP} -d ${IP} -m owner --uid-owner ${USER} -m owner --gid-owner ${GROUP} -m state --state NEW,ESTABLISHED -j ACCEPT
+		iptables -A INPUT -i ${interface} -p ${PROTOCOL} --sport ${PORT} -d ${IFACE_IP} -s ${IP} -m state --state ESTABLISHED -j ACCEPT
+	done
 }
 
 # This allows which group on the router can connect to what service
@@ -201,10 +203,12 @@ ACL_SERVICES_GROUP() {
 	PORT="${3}"
 	GROUP="${4}"
 	PROTOCOL="${5}"
-	IFACE_IP="$(ip address show ${IFACE} | grep -oP '(?<=inet ).*(?=/)')"
 
-	iptables -A OUTPUT -o ${IFACE} -p ${PROTOCOL} --dport ${PORT} -s ${IFACE_IP} -d ${IP} -m owner --gid-owner ${GROUP} -m state --state NEW,ESTABLISHED -j ACCEPT
-	iptables -A INPUT -i ${IFACE} -p ${PROTOCOL} --sport ${PORT} -d ${IFACE_IP} -s ${IP} -m state --state ESTABLISHED -j ACCEPT
+	for interface in ${IFACE}; do
+		IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
+		iptables -A OUTPUT -o ${interface} -p ${PROTOCOL} --dport ${PORT} -s ${IFACE_IP} -d ${IP} -m owner --gid-owner ${GROUP} -m state --state NEW,ESTABLISHED -j ACCEPT
+		iptables -A INPUT -i ${interface} -p ${PROTOCOL} --sport ${PORT} -d ${IFACE_IP} -s ${IP} -m state --state ESTABLISHED -j ACCEPT
+	done
 }
 
 # This allows which user on the router can connect to what service
@@ -214,10 +218,11 @@ ACL_SERVICES_USER() {
 	PORT="${3}"
 	USER="${4}"
 	PROTOCOL="${5}"
-	IFACE_IP="$(ip address show ${IFACE} | grep -oP '(?<=inet ).*(?=/)')"
-
-	iptables -A OUTPUT -o ${IFACE} -p ${PROTOCOL} --dport ${PORT} -s ${IFACE_IP} -d ${IP} -m owner --uid-owner ${USER} -m state --state NEW,ESTABLISHED -j ACCEPT
-	iptables -A INPUT -i ${IFACE} -p ${PROTOCOL} --sport ${PORT} -d ${IFACE_IP} -s ${IP} -m state --state ESTABLISHED -j ACCEPT
+	for interface in ${IFACE}; do
+		IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
+		iptables -A OUTPUT -o ${interface} -p ${PROTOCOL} --dport ${PORT} -s ${IFACE_IP} -d ${IP} -m owner --uid-owner ${USER} -m state --state NEW,ESTABLISHED -j ACCEPT
+		iptables -A INPUT -i ${interface} -p ${PROTOCOL} --sport ${PORT} -d ${IFACE_IP} -s ${IP} -m state --state ESTABLISHED -j ACCEPT
+	done
 }
 
 LOG(){
