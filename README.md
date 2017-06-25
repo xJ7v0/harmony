@@ -1,14 +1,28 @@
 # Harmony:
 
-	A iptables wrapper to make creating rules easier
+	A framework for firewall aimed at at all OSI Levels
 
-	Supports uid/gid matching, arp tables
+# Features
 
-	Aimed for very restrictive systems, only allows what you need
+1.	An iptables wrapper to make creating rules easier
 
-	Easy to use config file
+...	Supports uid/gid matching, arp tables
 
-	Scriptable
+...	Aimed for very restrictive systems, only allows what you need
+
+...	Easy to use config file
+
+...	Scriptable
+
+
+2.	Adshole
+...	Pulls in list from various websites for dnsmasq or an OS's host file
+
+3.	GeoIPACL
+...	An Access Control List to block countries using ipset
+
+4.	InternalAffairs
+...	Parses logs to help diagnose network issues
 
 # TODO:
 	Test for non router setup
