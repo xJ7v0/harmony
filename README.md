@@ -1,28 +1,35 @@
 # Harmony:
 
-	A framework for firewall aimed at at all OSI Levels
+	A framework for a firewall aimed at at all OSI Levels
 
 # Features
 
-1.	An iptables wrapper to make creating rules easier
+An iptables wrapper to make creating rules easier
+-------------------------------------------------
 
-...	Supports uid/gid matching, arp tables
+Supports uid/gid matching, arp tables
 
-...	Aimed for very restrictive systems, only allows what you need
+Aimed for very restrictive systems, only allows what you need
 
-...	Easy to use config file
+Easy to use config file
 
-...	Scriptable
+Scriptable
 
 
-2.	Adshole
-...	Pulls in list from various websites for dnsmasq or an OS's host file
+Adshole
+-------
 
-3.	GeoIPACL
-...	An Access Control List to block countries using ipset
+Pulls in list from various websites for dnsmasq or an OS's host file
 
-4.	InternalAffairs
-...	Parses logs to help diagnose network issues
+GeoIPACL
+--------
+
+An Access Control List to block countries using ipset
+
+InternalAffairs
+---------------
+
+Parses logs to help diagnose network issues
 
 # TODO:
 	Test for non router setup

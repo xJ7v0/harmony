@@ -134,16 +134,25 @@ INPUT() {
 	IFS=' 	
 '
 	for interface in ${IFACE}; do
-		IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
-
-		if [ ! -z ${5} ]; then
-			MAC="${5}"
-			iptables -A INPUT -i ${interface} -p ${PROTOCOL} --dport ${PORT} -s ${IP} -d ${IFACE_IP} -m mac --mac-source ${MAC} -m state --state NEW,ESTABLISHED -j ACCEPT
-			iptables -A OUTPUT -o ${interface} -p ${PROTOCOL}  --sport ${PORT} -d ${IP} -s ${IFACE_IP} -m state --state ESTABLISHED -j ACCEPT
+		# interface to ip 'tagging', useful for vlans and/or multiple interfaces
+		if [[ ${IP} == *':'* ]]; then
+			INPUT_IFACE=$(echo ${IP} | cut -d ":" -f1)
+			INPUT_IP=$(echo ${IP} | cut -d ":" -f2)
 		else
-			iptables -A INPUT -i ${interface} -p ${PROTOCOL} --dport ${PORT} -s ${IP} -d ${IFACE_IP} -m state --state NEW,ESTABLISHED -j ACCEPT
-			iptables -A OUTPUT -o ${interface} -p ${PROTOCOL}  --sport ${PORT} -d ${IP} -s ${IFACE_IP} -m state --state ESTABLISHED -j ACCEPT
+			INPUT_IFACE=${interface}
+			INPUT_IP=${IP}
+		fi
 
+		if [[ ${INPUT_IFACE} == ${interface} ]]; then
+			IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
+			if [ ! -z ${5} ]; then
+				MAC="${5}"
+				iptables -A INPUT -i ${interface} -p ${PROTOCOL} --dport ${PORT} -s ${INPUT_IP} -d ${IFACE_IP} -m mac --mac-source ${MAC} -m state --state NEW,ESTABLISHED -j ACCEPT
+				iptables -A OUTPUT -o ${interface} -p ${PROTOCOL} --sport ${PORT} -d ${INPUT_IP} -s ${IFACE_IP} -m state --state ESTABLISHED -j ACCEPT
+			else
+				iptables -A INPUT -i ${interface} -p ${PROTOCOL} --dport ${PORT} -s ${INPUT_IP} -d ${IFACE_IP} -m state --state NEW,ESTABLISHED -j ACCEPT
+				iptables -A OUTPUT -o ${interface} -p ${PROTOCOL} --sport ${PORT} -d ${INPUT_IP} -s ${IFACE_IP} -m state --state ESTABLISHED -j ACCEPT
+			fi
 		fi
 	done
 }
@@ -157,15 +166,25 @@ OUTPUT() {
 	IFS=' 	
 '
 	for interface in ${IFACE}; do
-		IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
-
-		if [ ! -z ${5} ]; then
-			MAC="${5}"
-			iptables -A INPUT -i ${interface} -p ${PROTOCOL} --sport ${PORT} -d ${LAN_IP} -d  ${IFACE_IP} -m mac --mac-source ${MAC} -m state --state ESTABLISHED -j ACCEPT
-			iptables -A OUTPUT -o ${interface} -p ${PROTOCOL} --dport ${PORT} -s ${LAN_IP} -d ${IFACE_IP} -m state --state NEW,ESTABLISHED -j ACCEPT
+		# interface to ip 'tagging', useful for vlans and/or multiple interfaces
+		if [[ ${IP} == *':'* ]]; then
+			OUTPUT_IFACE=$(echo ${IP} | cut -d ":" -f1)
+			OUTPUT_IP=$(echo ${IP} | cut -d ":" -f2)
 		else
-			iptables -A INPUT -i ${interface} -p ${PROTOCOL} --sport ${PORT} -d ${LAN_IP} -d  ${IFACE_IP} -m state --state ESTABLISHED -j ACCEPT
-			iptables -A OUTPUT -o ${interface} -p ${PROTOCOL} --dport ${PORT} -s ${LAN_IP} -d ${IFACE_IP} -m state --state NEW,ESTABLISHED -j ACCEPT
+			OUTPUT_IFACE=${interface}
+			OUTPUT_IP=${IP}
+		fi
+
+		if [[ ${OUTPUT_IFACE} == ${interface} ]]; then
+			IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
+			if [ ! -z ${5} ]; then
+				MAC="${5}"
+				iptables -A INPUT -i ${interface} -p ${PROTOCOL} --sport ${PORT} -s ${LAN_IP} -d ${IFACE_IP} -m mac --mac-source ${MAC} -m state --state ESTABLISHED -j ACCEPT
+				iptables -A OUTPUT -o ${interface} -p ${PROTOCOL} --dport ${PORT} -d ${LAN_IP} -s ${IFACE_IP} -m state --state NEW,ESTABLISHED -j ACCEPT
+			else
+				iptables -A INPUT -i ${interface} -p ${PROTOCOL} --sport ${PORT} -s ${LAN_IP} -d ${IFACE_IP} -m state --state ESTABLISHED -j ACCEPT
+				iptables -A OUTPUT -o ${interface} -p ${PROTOCOL} --dport ${PORT} -d ${LAN_IP} -s ${IFACE_IP} -m state --state NEW,ESTABLISHED -j ACCEPT
+			fi
 
 		fi
 	done
@@ -174,12 +193,30 @@ OUTPUT() {
 
 # This allows lan clients to use the internet
 FORWARD_NAT() {
-        IP="${1}"
-	PORT="${2}"
-	PROTOCOL="${3}"
-	iptables -A FORWARD -i ${LAN} -p ${PROTOCOL} --dport ${PORT} -s ${IP} -j ACCEPT
-	iptables -A FORWARD -i ${WAN} -p ${PROTOCOL} --sport ${PORT} -d ${IP} -j ACCEPT
-	iptables -t nat -A POSTROUTING -o ${WAN} -j MASQUERADE
+	NAT_IFACE_1="${1}"
+	NAT_IFACE_2="${2}"
+        IP="${3}"
+	PORT="${4}"
+	PROTOCOL="${5}"
+	IFS=' 	
+'
+	for interface in ${NAT_IFACE_1}; do
+		# interface to ip 'tagging', useful for vlans and/or multiple interfaces
+		if [[ ${IP} == *':'* ]]; then
+			FORWARD_IFACE_1=$(echo ${IP} | cut -d ":" -f1)
+			FORWARD_IP=$(echo ${IP} | cut -d ":" -f2)
+		else
+			FORWARD_IFACE=${interface}
+			FORWARD_IP=${IP}
+		fi
+
+		if [[ ${FORWARD_IFACE} == ${interface} ]]; then
+			iptables -A FORWARD -i ${interface} -p ${PROTOCOL} --dport ${PORT} -s ${FORWARD_IP} -j ACCEPT
+			iptables -A FORWARD -i ${NAT_IFACE_2} -p ${PROTOCOL} --sport ${PORT} -d ${FORWARD_IP} -j ACCEPT
+			iptables -t nat -A POSTROUTING -o ${NAT_IFACE_2} -j MASQUERADE
+
+		fi
+	done
 }
 
 # This allows which user and group on the router can connect to what service
@@ -193,9 +230,20 @@ ACL_SERVICES() {
 	IFS=' 	
 '
 	for interface in ${IFACE}; do
-		IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
-		iptables -A OUTPUT -o ${interface} -p ${PROTOCOL} --dport ${PORT} -s ${IFACE_IP} -d ${IP} -m owner --uid-owner ${USER} -m owner --gid-owner ${GROUP} -m state --state NEW,ESTABLISHED -j ACCEPT
-		iptables -A INPUT -i ${interface} -p ${PROTOCOL} --sport ${PORT} -d ${IFACE_IP} -s ${IP} -m state --state ESTABLISHED -j ACCEPT
+		# interface to ip 'tagging', useful for vlans and/or multiple interfaces
+		if [[ ${IP} == *':'* ]]; then
+			ACL_IFACE=$(echo ${IP} | cut -d ":" -f1)
+			ACL_IP=$(echo ${IP} | cut -d ":" -f2)
+		else
+			ACL_IFACE=${interface}
+			ACL_IP=${IP}
+		fi
+
+		if [[ ${ACL_IFACE} == ${interface} ]]; then
+			IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
+			iptables -A OUTPUT -o ${interface} -p ${PROTOCOL} --dport ${PORT} -s ${IFACE_IP} -d ${ACL_IP} -m owner --uid-owner ${USER} -m owner --gid-owner ${GROUP} -m state --state NEW,ESTABLISHED -j ACCEPT
+			iptables -A INPUT -i ${interface} -p ${PROTOCOL} --sport ${PORT} -d ${IFACE_IP} -s ${ACL_IP} -m state --state ESTABLISHED -j ACCEPT
+		fi
 	done
 }
 
@@ -209,9 +257,20 @@ ACL_SERVICES_GROUP() {
 	IFS=' 	
 '
 	for interface in ${IFACE}; do
-		IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
-		iptables -A OUTPUT -o ${interface} -p ${PROTOCOL} --dport ${PORT} -s ${IFACE_IP} -d ${IP} -m owner --gid-owner ${GROUP} -m state --state NEW,ESTABLISHED -j ACCEPT
-		iptables -A INPUT -i ${interface} -p ${PROTOCOL} --sport ${PORT} -d ${IFACE_IP} -s ${IP} -m state --state ESTABLISHED -j ACCEPT
+		# interface to ip 'tagging', useful for vlans and/or multiple interfaces
+		if [[ ${IP} == *':'* ]]; then
+			ACL_GROUP_IFACE=$(echo ${IP} | cut -d ":" -f1)
+			ACL_GROUP_IP=$(echo ${IP} | cut -d ":" -f2)
+		else
+			ACL_GROUP_IFACE=${interface}
+			ACL_GROUP_IP=${IP}
+		fi
+
+		if [[ ${ACL_GROUP_IFACE} == ${interface} ]]; then
+			IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
+			iptables -A OUTPUT -o ${interface} -p ${PROTOCOL} --dport ${PORT} -s ${IFACE_IP} -d ${ACL_GROUP_IP} -m owner --gid-owner ${GROUP} -m state --state NEW,ESTABLISHED -j ACCEPT
+			iptables -A INPUT -i ${interface} -p ${PROTOCOL} --sport ${PORT} -d ${IFACE_IP} -s ${ACL_GROUP_IP} -m state --state ESTABLISHED -j ACCEPT
+		fi
 	done
 }
 
@@ -225,9 +284,20 @@ ACL_SERVICES_USER() {
 	IFS=' 	
 '
 	for interface in ${IFACE}; do
-		IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
-		iptables -A OUTPUT -o ${interface} -p ${PROTOCOL} --dport ${PORT} -s ${IFACE_IP} -d ${IP} -m owner --uid-owner ${USER} -m state --state NEW,ESTABLISHED -j ACCEPT
-		iptables -A INPUT -i ${interface} -p ${PROTOCOL} --sport ${PORT} -d ${IFACE_IP} -s ${IP} -m state --state ESTABLISHED -j ACCEPT
+		# interface to ip 'tagging', useful for vlans and/or multiple interfaces
+		if [[ ${IP} == *':'* ]]; then
+			ACL_USER_IFACE=$(echo ${IP} | cut -d ":" -f1)
+			ACL_USER_IP=$(echo ${IP} | cut -d ":" -f2)
+		else
+			ACL_USER_IFACE=${interface}
+			ACL_USER_IP=${IP}
+		fi
+
+		if [[ ${ACL_USER_IFACE} == ${interface} ]]; then
+			IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
+			iptables -A OUTPUT -o ${interface} -p ${PROTOCOL} --dport ${PORT} -s ${IFACE_IP} -d ${ACL_USER_IP} -m owner --uid-owner ${USER} -m state --state NEW,ESTABLISHED -j ACCEPT
+			iptables -A INPUT -i ${interface} -p ${PROTOCOL} --sport ${PORT} -d ${IFACE_IP} -s ${ACL_USER_IP} -m state --state ESTABLISHED -j ACCEPT
+		fi
 	done
 }
 
