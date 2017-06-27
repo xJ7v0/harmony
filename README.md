@@ -1,6 +1,6 @@
-# Harmony:
-
-	A framework for a firewall aimed at at all OSI Levels
+Harmony
+=======
+A framework for a firewall aimed at at all OSI Levels
 
 # Features
 

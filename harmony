@@ -1,15 +1,53 @@
 #!/bin/bash
 # Description: An easy to use firewall builder for computers using dual nics or just one
 # Dependencies: iptables, arptables (optional)
+
+# Change this if needed to be
+DNSCRYPT_RESOLVERS="/usr/share/dnscrypt-proxy/dnscrypt-resolvers.csv"
+
 OPT="${1}"
 
-if [ ! -z ${DNS_FILE} ]; then
-	DNS_FILE="/root/.config/harmony/dns"
-fi
+#if [ ! -z ${DNS_FILE} ]; then
+#	DNS_FILE="/root/.config/harmony/dns"
+#fi
+
+# Some routines to help speed up loading config files
+# Since these are static we dont need to load the rules every time, just once
+INIT() {
+
+	### To do any kind of 'url'/'host' filtering you must have a working dns ###
+	if [[ -f ${DNSCRYPT_RESOLVERS} && $(which dnscrypt-proxy 2>/dev/null) && ! $(iptables -n --list "OUT_DNSCRYPT_ACL" 2>/dev/null) ]]; then
+		iptables -N IN_DNSCRYPT_ACL
+		iptables -N OUT_DNSCRYPT_ACL
+
+		IFACE=$(netstat -rnf iface 2>&1 |  sed -e "s/[[:space:]]\+/ /g" | grep UG | cut -d " " -f8)
+		IFACE_IP="$(ip address show ${IFACE} | grep -oP '(?<=inet ).*(?=/)')"
+
+		for dns_host in $(egrep -o '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' ${DNSCRYPT_RESOLVERS} | cut -d "," -f1); do
+
+ 			if [[ ${dns_host} == *:* ]]; then
+				HOST_IP=$(echo ${dns_host} | cut -d ":" -f1)
+				HOST_PORT=$(echo ${dns_host} | cut -d ":" -f2)
+			else
+				HOST_IP=${dns_host}
+				HOST_PORT=443
+			fi
+			# TCP
+			iptables -A OUT_DNSCRYPT_ACL -o ${IFACE} -p tcp --dport ${HOST_PORT} -s ${IFACE_IP} -d ${HOST_IP} -m owner --uid-owner dnscrypt -m owner --gid-owner dnscrypt -m state --state NEW,ESTABLISHED -j ACCEPT
+			iptables -A IN_DNSCRYPT_ACL -i ${IFACE} -p tcp --sport ${HOST_PORT} -d ${IFACE_IP} -s ${HOST_IP} -m state --state ESTABLISHED -j ACCEPT
+			# UDP
+			iptables -A OUT_DNSCRYPT_ACL -o ${IFACE} -p udp --dport ${HOST_PORT} -s ${IFACE_IP} -d ${HOST_IP} -m owner --uid-owner dnscrypt -m owner --gid-owner dnscrypt -m state --state NEW,ESTABLISHED -j ACCEPT
+			iptables -A IN_DNSCRYPT_ACL -i ${IFACE} -p udp --sport ${HOST_PORT} -d ${IFACE_IP} -s ${HOST_IP} -m state --state ESTABLISHED -j ACCEPT
+
+		done
+	fi
+
+
+}
 
 FLUSH() {
-	iptables -F
-	iptables -X
+	#iptables -F
+	#iptables -X
 	iptables -t nat -F
 	iptables -t nat -X
 	iptables -t mangle -F
@@ -35,6 +73,10 @@ FLUSH() {
 		arptables -P OUTPUT DROP
 		arptables -P FORWARD DROP
 	fi
+
+	iptables -A OUTPUT -j OUT_DNSCRYPT_ACL
+	iptables -A INPUT -j IN_DNSCRYPT_ACL
+
 
 #	if [ ! -f ${DNS_FILE} ];
 
@@ -351,7 +393,6 @@ SAVE() {
 	service iptables restart
 }
 
-
 USAGE() {
 
 	echo """
@@ -379,6 +420,7 @@ ARGUMENTS TO FUNCTIONS
 
 }
 
+INIT
 
 case ${OPT} in
 
