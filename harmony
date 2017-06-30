@@ -112,15 +112,15 @@ PREROUTING_SECURTIY() {
 	/sbin/iptables -t mangle -A PREROUTING -p tcp --tcp-flags ALL SYN,RST,ACK,FIN,URG -j DROP
 
 	### 5: Block spoofed packets ###
-	/sbin/iptables -t mangle -A PREROUTING -s 224.0.0.0/3 -j DROP
-	/sbin/iptables -t mangle -A PREROUTING -s 169.254.0.0/16 -j DROP
-	/sbin/iptables -t mangle -A PREROUTING -s 172.16.0.0/12 -j DROP
-	/sbin/iptables -t mangle -A PREROUTING -s 192.0.2.0/24 -j DROP
-	/sbin/iptables -t mangle -A PREROUTING -s 192.168.0.0/16 ! -i ${LAN} -j DROP
-	/sbin/iptables -t mangle -A PREROUTING -s 10.0.0.0/8 -j DROP
-	/sbin/iptables -t mangle -A PREROUTING -s 0.0.0.0/8 -j DROP
-	/sbin/iptables -t mangle -A PREROUTING -s 240.0.0.0/5 -j DROP
-	/sbin/iptables -t mangle -A PREROUTING -s 127.0.0.0/8 ! -i lo -j DROP
+	/sbin/iptables -t mangle -A PREROUTING -i ${WAN} -s 224.0.0.0/3 -j DROP
+	/sbin/iptables -t mangle -A PREROUTING -i ${WAN} -s 169.254.0.0/16 -j DROP
+	/sbin/iptables -t mangle -A PREROUTING -i ${WAN} -s 172.16.0.0/12 -j DROP
+	/sbin/iptables -t mangle -A PREROUTING -i ${WAN} -s 192.0.2.0/24 -j DROP
+	/sbin/iptables -t mangle -A PREROUTING -i ${WAN} -s 192.168.0.0/16 -j DROP
+	/sbin/iptables -t mangle -A PREROUTING -i ${WAN} -s 10.0.0.0/8 -j DROP
+	/sbin/iptables -t mangle -A PREROUTING -i ${WAN} -s 0.0.0.0/8 -j DROP
+	/sbin/iptables -t mangle -A PREROUTING -i ${WAN} -s 240.0.0.0/5 -j DROP
+	/sbin/iptables -t mangle -A PREROUTING -i ${WAN} -s 127.0.0.0/8 -j DROP
 
 	### 6: Drop ICMP (you usually don't need this protocol) ###
 	/sbin/iptables -t mangle -A PREROUTING -p icmp -j DROP
@@ -145,10 +145,11 @@ PREROUTING_SECURTIY() {
 	#/sbin/iptables -A INPUT -m conntrack --ctstate INVALID -j DROP
 
 	### Protection against port scanning ###
-	/sbin/iptables -N port-scanning
-	/sbin/iptables -A port-scanning -p tcp --tcp-flags SYN,ACK,FIN,RST RST -m limit --limit 1/s --limit-burst 2 -j RETURN
-	/sbin/iptables -A port-scanning -j DROP
-
+	if [ ! $(iptables -n --list "port-scanning" 2>/dev/null) ]; then
+		/sbin/iptables -N port-scanning
+		/sbin/iptables -A port-scanning -p tcp --tcp-flags SYN,ACK,FIN,RST RST -m limit --limit 1/s --limit-burst 2 -j RETURN
+		/sbin/iptables -A port-scanning -j DROP
+	fi
 }
 
 # To be changed
@@ -349,7 +350,7 @@ LOG(){
 		iptables -N LOGGING_PREROUTING
 		iptables -t nat -A PREROUTING -j LOGGING_PREROUTING
 		iptables -t nat -A PREROUTING -j LOG
-		iptables -t nat -A PREROUTING -j LOG --log-prefix "IPTABLES-Dropped_PREROTUING: " --log-level ${LOGGING_PREROUTING}
+		iptables -t nat -A PREROUTING -j LOG --log-prefix "IPTABLES-Dropped_PREROUTING: " --log-level ${LOGGING_PREROUTING}
 		iptables -A LOGGING_PREROUTING -j DROP
 	fi
 
