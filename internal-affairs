@@ -1,0 +1,15 @@
+#!/bin/bash
+
+
+FLUSH_LOGS() {
+
+	iptables -F 
+	iptables -X
+
+}
+
+
+
+
+
+if [ ! $(iptables -n --list 
