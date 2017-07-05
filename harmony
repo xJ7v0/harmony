@@ -276,16 +276,15 @@ ACL_SERVICES() {
 	IFACE="${1}"
 	IP="${2}"
 	PORT="${3}"
-	USER="${4}"
-	GROUP="${5}"
-	PROTOCOL="${6}"
+	USER_GROUP="${4}"
+	PROTOCOL="${5}"
 	IFS=' 	
 '
 	for interface in ${IFACE}; do
 		# interface to ip 'tagging', useful for vlans and/or multiple interfaces
 		if [[ ${IP} == *':'* ]]; then
-			ACL_IFACE=$(echo ${IP} | cut -d ":" -f1)
-			ACL_IP=$(echo ${IP} | cut -d ":" -f2)
+			ACL_IFACE=$(echo ${IP} | cut -d ':' -f1)
+			ACL_IP=$(echo ${IP} | cut -d ':' -f2)
 		else
 			ACL_IFACE=${interface}
 			ACL_IP=${IP}
@@ -294,82 +293,25 @@ ACL_SERVICES() {
 		if [[ ${ACL_IFACE} == ${interface} ]]; then
 
 			if [[ ${interface} == *':'* ]]; then
-				interface=$(echo "${interface}" | cut -d ":" -f1)
-				IFACE_IP=$(echo "${ACL_IFACE}" | cut -d ":" -f2)
+				interface=$(echo "${interface}" | cut -d ':' -f1)
+				IFACE_IP=$(echo "${ACL_IFACE}" | cut -d ':' -f2)
 			else
 				IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
 			fi
 
-			iptables -A OUTPUT -o ${interface} -p ${PROTOCOL} --dport ${PORT} -s ${IFACE_IP} -d ${ACL_IP} -m owner --uid-owner ${USER} -m owner --gid-owner ${GROUP} -m state --state NEW,ESTABLISHED -j ACCEPT
+			USER=$(echo ${USER_GROUP} | cut -zd ':' -f1)
+			GROUP=$(echo ${USER_GROUP} | cut -zd ':' -f2)
+
+			if [ ! -z ${USER} ]; then
+				USER="-m owner --uid-owner ${USER}"
+			fi
+
+			if [ ! -z ${GROUP} ]; then
+				GROUP="-m owner --gid-owner ${GROUP}"
+			fi
+
+			iptables -A OUTPUT -o ${interface} -p ${PROTOCOL} --dport ${PORT} -s ${IFACE_IP} -d ${ACL_IP} ${USER} ${GROUP} -m state --state NEW,ESTABLISHED -j ACCEPT
 			iptables -A INPUT -i ${interface} -p ${PROTOCOL} --sport ${PORT} -d ${IFACE_IP} -s ${ACL_IP} -m state --state ESTABLISHED -j ACCEPT
-		fi
-	done
-}
-
-# This allows which group on the router can connect to what service
-ACL_SERVICES_GROUP() {
-	IFACE="${1}"
-	IP="${2}"
-	PORT="${3}"
-	GROUP="${4}"
-	PROTOCOL="${5}"
-	IFS=' 	
-'
-	for interface in ${IFACE}; do
-		# interface to ip 'tagging', useful for vlans and/or multiple interfaces
-		if [[ ${IP} == *':'* ]]; then
-			ACL_GROUP_IFACE=$(echo ${IP} | cut -d ":" -f1)
-			ACL_GROUP_IP=$(echo ${IP} | cut -d ":" -f2)
-		else
-			ACL_GROUP_IFACE=${interface}
-			ACL_GROUP_IP=${IP}
-		fi
-
-		if [[ ${ACL_GROUP_IFACE} == ${interface} ]]; then
-
-			if [[ ${interface} == *':'* ]]; then
-				interface=$(echo "${interface}" | cut -d ":" -f1)
-				IFACE_IP=$(echo "${ACL_GROUP_IFACE}" | cut -d ":" -f2)
-			else
-				IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
-			fi
-
-			iptables -A OUTPUT -o ${interface} -p ${PROTOCOL} --dport ${PORT} -s ${IFACE_IP} -d ${ACL_GROUP_IP} -m owner --gid-owner ${GROUP} -m state --state NEW,ESTABLISHED -j ACCEPT
-			iptables -A INPUT -i ${interface} -p ${PROTOCOL} --sport ${PORT} -d ${IFACE_IP} -s ${ACL_GROUP_IP} -m state --state ESTABLISHED -j ACCEPT
-		fi
-	done
-}
-
-# This allows which user on the router can connect to what service
-ACL_SERVICES_USER() {
-	IFACE="${1}"
-	IP="${2}"
-	PORT="${3}"
-	USER="${4}"
-	PROTOCOL="${5}"
-	IFS=' 	
-'
-	for interface in ${IFACE}; do
-		# interface to ip 'tagging', useful for vlans and/or multiple interfaces
-		if [[ ${IP} == *':'* ]]; then
-			ACL_USER_IFACE=$(echo ${IP} | cut -d ":" -f1)
-			ACL_USER_IP=$(echo ${IP} | cut -d ":" -f2)
-		else
-			ACL_USER_IFACE=${interface}
-			ACL_USER_IP=${IP}
-		fi
-
-		if [[ ${ACL_USER_IFACE} == ${interface} ]]; then
-
-			if [[ ${interface} == *':'* ]]; then
-				interface=$(echo "${interface}" | cut -d ":" -f1)
-				IFACE_IP=$(echo "${ACL_USER_IFACE}" | cut -d ":" -f2)
-			else
-				IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
-			fi
-
-			iptables -A OUTPUT -o ${interface} -p ${PROTOCOL} --dport ${PORT} -s ${IFACE_IP} -d ${ACL_USER_IP} -m owner --uid-owner ${USER} -m state --state NEW,ESTABLISHED -j ACCEPT
-			iptables -A INPUT -i ${interface} -p ${PROTOCOL} --sport ${PORT} -d ${IFACE_IP} -s ${ACL_USER_IP} -m state --state ESTABLISHED -j ACCEPT
 		fi
 	done
 }
