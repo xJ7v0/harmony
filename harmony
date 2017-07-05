@@ -16,7 +16,7 @@ OPT="${1}"
 INIT() {
 
 	### To do any kind of 'url'/'host' filtering you must have a working dns ###
-	if [[ -f ${DNSCRYPT_RESOLVERS} && $(which dnscrypt-proxy 2>/dev/null) && ! $(iptables -n --list "OUT_DNSCRYPT_ACL" 2>/dev/null) ]]; then
+	if [[ -f ${DNSCRYPT_RESOLVERS} && $(which dnscrypt-proxy 2>/dev/null) && ! $(iptables -nL "OUT_DNSCRYPT_ACL" 2>/dev/null) ]]; then
 		iptables -N IN_DNSCRYPT_ACL
 		iptables -N OUT_DNSCRYPT_ACL
 
@@ -41,7 +41,6 @@ INIT() {
 
 		done
 	fi
-
 
 }
 
@@ -145,7 +144,7 @@ PREROUTING_SECURTIY() {
 	#/sbin/iptables -A INPUT -m conntrack --ctstate INVALID -j DROP
 
 	### Protection against port scanning ###
-	if [[ ! $(iptables -n --list "port-scanning" 2>/dev/null) ]]; then
+	if [[ ! $(iptables -nL "port-scanning" 2>/dev/null) ]]; then
 		/sbin/iptables -N port-scanning
 		/sbin/iptables -A port-scanning -p tcp --tcp-flags SYN,ACK,FIN,RST RST -m limit --limit 1/s --limit-burst 2 -j RETURN
 		/sbin/iptables -A port-scanning -j DROP
@@ -191,7 +190,14 @@ INPUT() {
 		fi
 
 		if [[ ${INPUT_IFACE} == ${interface} ]]; then
-			IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
+
+			if [[ ${interface} == *':'* ]]; then
+				interface=$(echo "${interface}" | cut -d ":" -f1)
+				IFACE_IP=$(echo "${INPUT_IFACE}" | cut -d ":" -f2)
+			else
+				IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
+			fi
+
 			iptables -A INPUT -i ${interface} -p ${PROTOCOL} --dport ${PORT} -s ${INPUT_IP} -d ${IFACE_IP} ${MAC} -m state --state NEW,ESTABLISHED -j ACCEPT
 			iptables -A OUTPUT -o ${interface} -p ${PROTOCOL} --sport ${PORT} -d ${INPUT_IP} -s ${IFACE_IP} -m state --state ESTABLISHED -j ACCEPT
 		fi
@@ -221,7 +227,14 @@ OUTPUT() {
 		fi
 
 		if [[ ${OUTPUT_IFACE} == ${interface} ]]; then
-			IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
+
+			if [[ ${interface} == *':'* ]]; then
+				interface=$(echo "${interface}" | cut -d ":" -f1)
+				IFACE_IP=$(echo "${OUTPUT_IFACE}" | cut -d ":" -f2)
+			else
+				IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
+			fi
+
 			iptables -A INPUT -i ${interface} -p ${PROTOCOL} --sport ${PORT} -s ${LAN_IP} -d ${IFACE_IP} ${MAC} -m state --state ESTABLISHED -j ACCEPT
 			iptables -A OUTPUT -o ${interface} -p ${PROTOCOL} --dport ${PORT} -d ${LAN_IP} -s ${IFACE_IP} -m state --state NEW,ESTABLISHED -j ACCEPT
 
@@ -279,7 +292,14 @@ ACL_SERVICES() {
 		fi
 
 		if [[ ${ACL_IFACE} == ${interface} ]]; then
-			IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
+
+			if [[ ${interface} == *':'* ]]; then
+				interface=$(echo "${interface}" | cut -d ":" -f1)
+				IFACE_IP=$(echo "${ACL_IFACE}" | cut -d ":" -f2)
+			else
+				IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
+			fi
+
 			iptables -A OUTPUT -o ${interface} -p ${PROTOCOL} --dport ${PORT} -s ${IFACE_IP} -d ${ACL_IP} -m owner --uid-owner ${USER} -m owner --gid-owner ${GROUP} -m state --state NEW,ESTABLISHED -j ACCEPT
 			iptables -A INPUT -i ${interface} -p ${PROTOCOL} --sport ${PORT} -d ${IFACE_IP} -s ${ACL_IP} -m state --state ESTABLISHED -j ACCEPT
 		fi
@@ -306,7 +326,14 @@ ACL_SERVICES_GROUP() {
 		fi
 
 		if [[ ${ACL_GROUP_IFACE} == ${interface} ]]; then
-			IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
+
+			if [[ ${interface} == *':'* ]]; then
+				interface=$(echo "${interface}" | cut -d ":" -f1)
+				IFACE_IP=$(echo "${ACL_GROUP_IFACE}" | cut -d ":" -f2)
+			else
+				IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
+			fi
+
 			iptables -A OUTPUT -o ${interface} -p ${PROTOCOL} --dport ${PORT} -s ${IFACE_IP} -d ${ACL_GROUP_IP} -m owner --gid-owner ${GROUP} -m state --state NEW,ESTABLISHED -j ACCEPT
 			iptables -A INPUT -i ${interface} -p ${PROTOCOL} --sport ${PORT} -d ${IFACE_IP} -s ${ACL_GROUP_IP} -m state --state ESTABLISHED -j ACCEPT
 		fi
@@ -333,7 +360,14 @@ ACL_SERVICES_USER() {
 		fi
 
 		if [[ ${ACL_USER_IFACE} == ${interface} ]]; then
-			IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
+
+			if [[ ${interface} == *':'* ]]; then
+				interface=$(echo "${interface}" | cut -d ":" -f1)
+				IFACE_IP=$(echo "${ACL_USER_IFACE}" | cut -d ":" -f2)
+			else
+				IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
+			fi
+
 			iptables -A OUTPUT -o ${interface} -p ${PROTOCOL} --dport ${PORT} -s ${IFACE_IP} -d ${ACL_USER_IP} -m owner --uid-owner ${USER} -m state --state NEW,ESTABLISHED -j ACCEPT
 			iptables -A INPUT -i ${interface} -p ${PROTOCOL} --sport ${PORT} -d ${IFACE_IP} -s ${ACL_USER_IP} -m state --state ESTABLISHED -j ACCEPT
 		fi

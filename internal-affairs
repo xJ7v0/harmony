@@ -1,15 +1,84 @@
 #!/bin/bash
+# Name: InternalAffairs
 
+LOG_FILE="/tmp/InternalAffairs"
 
+INIT() {
+
+	if [ ! -f ${LOG_FILE} ]; then
+		touch ${LOG_FILE}
+	fi
+
+}
 FLUSH_LOGS() {
 
-	iptables -F 
-	iptables -X
+	iptables -F InternalAffairs-PreRouting
+	iptables -X InternalAffairs-PreRouting
+	iptables -F InternalAffairs-Input
+	iptables -X InternalAffairs-Input
+	iptables -F InternalAffairs-Output
+	iptables -X InternalAffairs-Output
+	iptables -F InternalAffairs-PostRouting
+	iptables -X InternalAffairs-PostRouting
+
+}
+
+CREATE_CHAINS() {
+
+	if [[ ! $(iptables -nL "InternalAffairs-PreRouting" 2>/dev/null) ]]; then
+		iptables -N InternalAffairs-PreRouting
+	fi
+
+	if [[ ! $(iptables -nL "InternalAffairs-Input" 2>/dev/null) ]];then
+		iptables -N InternalAffairs-Input
+	fi
+
+	if [[ ! $(iptables -nL "InternalAffairs-Output" 2>/dev/null ]]; then
+		iptables -N InternalAffairs-Output
+	fi
+
+	if [[ ! $(iptables -nL "InternalAffairs-Forward" 2>/dev/null ]]; then
+		iptables -N InternalAffairs-Forward
+	fi
+
+	if [[ ! $(iptables -nL "InternalAffairs-PostRouting" 2>/dev/null ]]; then
+		iptables -N InternalAffairs-PostRouting
+	fi
+
+}
+
+START_LOGGING() {
+	# Prerouting
+	iptables -t nat -A PREROUTING -j InternalAffairs-PreRouting
+	iptables -t nat -A PREROUTING -j LOG --log-uid --log-level 7 --log-prefix "[InternalAffairs]-Dropped_PREROUTING: "
+	iptables -A InternalAffairs-PreRouting -j DROP
+
+	# Input
+	iptables -A INPUT -j InternalAffairs-Input
+	iptables -A LOGGING_LAN -j LOG --log-uid --log-level 7 --log-prefix "[InternalAffairs]-Dropped_INPUT: "
+	iptables -A LOGGING_LAN -j DROP
+
+	# Output
+	iptables -A OUTPUT -j InternalAffairs-Output
+	iptables -A LOGGING_LAN -j LOG --log-uid --log-level 7 --log-prefix "[InternalAffairs]-Dropped_OUTPUT: "
+	iptables -A LOGGING_LAN -j DROP
+
+	# Forward
+	iptables -A FORWARD -j InternalAffairs-Forward
+	iptables -A LOGGING_FORWARD -j LOG --log-uid --log-level 7 --log-prefix "[InternalAffairs]-Dropped_FORWARD: "
+	iptables -A LOGGING_FORWARD -j DROP
+
+	# Postrouting
+	iptables -t nat -A POSTROUTING -j InternalAffairs
+	iptables -t nat -A POSTROUTING -j LOG --log-uid --log-level 7 --log-prefix "[InternalAffairs]-Dropped_POSTROUTING: "
+	iptables -A LOGGING_POSTROUTING -j DROP
+
+}
+
+USAGE() {
+
+	echo """internal-affairs"""
 
 }
 
 
-
-
-
-if [ ! $(iptables -n --list 
