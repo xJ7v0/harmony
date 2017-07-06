@@ -245,28 +245,28 @@ OUTPUT() {
 
 # This allows lan clients to use the internet
 FORWARD_NAT() {
-	NAT_IFACE_1="${1}"
-	NAT_IFACE_2="${2}"
-        IP="${3}"
-	PORT="${4}"
-	PROTOCOL="${5}"
+	SRC_IFACE="${1}"
+        SRC_IP="${2}"
+	DST_IFACE="${3}"
+	DST_IP="${4}"
+	DST_PORT="${5}"
+	PROTOCOL="${6}"
 	IFS=' 	
 '
-	for interface in ${NAT_IFACE_1}; do
+	for interface in ${SRC_IFACE}; do
 		# interface to ip 'tagging', useful for vlans and/or multiple interfaces
-		if [[ ${IP} == *':'* ]]; then
-			FORWARD_IFACE_1=$(echo ${IP} | cut -d ":" -f1)
-			FORWARD_IP=$(echo ${IP} | cut -d ":" -f2)
+		if [[ ${SRC_IP} == *':'* ]]; then
+			SRC_IFACE_1=$(echo ${SRC_IP} | cut -d ":" -f1)
+			SRC_IP_1=$(echo ${SRC_IP} | cut -d ":" -f2)
 		else
-			FORWARD_IFACE=${interface}
-			FORWARD_IP=${IP}
+			SRC_IFACE_1=${interface}
+			SRC_IP_1=${SRC_IP}
 		fi
 
-		if [[ ${FORWARD_IFACE} == ${interface} ]]; then
-			iptables -A FORWARD -i ${interface} -p ${PROTOCOL} --dport ${PORT} -s ${FORWARD_IP} -j ACCEPT
-			iptables -A FORWARD -i ${NAT_IFACE_2} -p ${PROTOCOL} --sport ${PORT} -d ${FORWARD_IP} -j ACCEPT
-			iptables -t nat -A POSTROUTING -o ${NAT_IFACE_2} -j MASQUERADE
-
+		if [[ ${SRC_IFACE_1} == ${interface} ]]; then
+			iptables -A FORWARD -i ${interface} -p ${PROTOCOL} --dport ${DST_PORT} -s ${SRC_IP_1} -d ${DST_IP} -j ACCEPT
+			iptables -A FORWARD -i ${DST_IFACE} -p ${PROTOCOL} --sport ${DST_PORT} -d ${SRC_IP_1} -s ${DST_IP} -j ACCEPT
+			iptables -t nat -A POSTROUTING -o ${DST_IFACE} -j MASQUERADE
 		fi
 	done
 }
