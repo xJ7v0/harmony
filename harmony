@@ -26,10 +26,10 @@ INIT() {
 		for dns_host in $(egrep -o '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' ${DNSCRYPT_RESOLVERS} | cut -d "," -f1); do
 
  			if [[ ${dns_host} == *:* ]]; then
-				HOST_IP=$(echo ${dns_host} | cut -d ":" -f1)
-				HOST_PORT=$(echo ${dns_host} | cut -d ":" -f2)
+				HOST_IP=$(echo "${dns_host}" | cut -d ":" -f1)
+				HOST_PORT=$(echo "${dns_host}" | cut -d ":" -f2)
 			else
-				HOST_IP=${dns_host}
+				HOST_IP="${dns_host}"
 				HOST_PORT=443
 			fi
 			# TCP
@@ -45,33 +45,71 @@ INIT() {
 }
 
 FLUSH() {
-	#iptables -F
-	#iptables -X
-	iptables -t nat -F
-	iptables -t nat -X
-	iptables -t mangle -F
-	iptables -t mangle -X
+	TYPE="${1}"
+	for type in ${TYPE}; do
 
-	iptables -F INPUT
-	iptables -F OUTPUT
-	iptables -F FORWARD
 
+		if [[ ${type} == "ALL" ]]; then
+
+			iptables -F
+			iptables -X
+			iptables -t filter -F
+			iptables -t filter -X
+			iptables -t mangle -F
+			iptables -t mangle -X
+			iptables -t nat -F
+			iptables -t nat -X
+			iptables -t raw -F
+			iptables -t raw -X
+
+			if [ $(which arptables 2>/dev/null) ]; then
+				arptables -F
+				arptables -X
+				arptables -t nat -F
+				arptables -t nat -X
+				arptables -t mangle -F
+				arptables -t mangle -X
+
+				arptables -P INPUT DROP
+				arptables -P OUTPUT DROP
+				arptables -P FORWARD DROP
+			fi
+		fi
+
+		if [[ ${type} == "LOG" ]]; then
+			echo hello
+			iptables -F LOGGING_PREROUTING 2>/dev/null
+			iptables -F LOGGING_LAN 2>/dev/null
+			iptables -F LOGGING_WAN 2>/dev/null
+			iptables -F LOGGING_FORWARD 2>/dev/null
+			iptables -F LOGGING_POSTROUTING 2>/dev/null
+
+			iptables -X LOGGING_PREROUTING 2>/dev/null
+			iptables -X LOGGING_LAN 2>/dev/null
+			iptables -X LOGGING_WAN 2>/dev/null
+			iptables -X LOGGING_FORWARD 2>/dev/null
+			iptables -X LOGGING_POSTROUTING 2>/dev/null
+		fi
+
+		if [[ ${type} == "DEFAULT" ]]; then
+			iptables -t nat -F
+			iptables -t nat -X
+			iptables -t mangle -F
+			iptables -t mangle -X
+
+			iptables -F INPUT
+			iptables -F OUTPUT
+			iptables -F FORWARD
+		fi
+
+	done
+
+	# Default Policies
 	iptables -P INPUT DROP
 	iptables -P OUTPUT DROP
 	iptables -P FORWARD DROP
 
-	if [ $(which arptables 2>/dev/null) ]; then
-		arptables -F
-		arptables -X
-		arptables -t nat -F
-		arptables -t nat -X
-		arptables -t mangle -F
-		arptables -t mangle -X
-
-		arptables -P INPUT DROP
-		arptables -P OUTPUT DROP
-		arptables -P FORWARD DROP
-	fi
+	INIT
 
 	iptables -A OUTPUT -j OUT_DNSCRYPT_ACL
 	iptables -A INPUT -j IN_DNSCRYPT_ACL
@@ -79,6 +117,16 @@ FLUSH() {
 
 #	if [ ! -f ${DNS_FILE} ];
 
+
+}
+
+PORT_KNOCKING() {
+	COMBO="${1}"
+	DST_PORT="${2}"
+
+	if [[ ! $(iptables -nL "KNOCKING_${DST_PORT}" 2>/dev/null) ]]; then
+		iptables -N "KNOCKING_${DST_PORT}"
+	fi
 
 }
 
@@ -246,7 +294,7 @@ OUTPUT() {
 # This allows lan clients to use the internet
 FORWARD_NAT() {
 	SRC_IFACE="${1}"
-        SRC_IP="${2}"
+	SRC_IP="${2}"
 	DST_IFACE="${3}"
 	DST_IP="${4}"
 	DST_PORT="${5}"
@@ -392,8 +440,6 @@ ARGUMENTS TO FUNCTIONS
 	exit 1
 
 }
-
-INIT
 
 case ${OPT} in
 
