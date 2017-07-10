@@ -25,7 +25,7 @@ INIT() {
 
 		for dns_host in $(egrep -o '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' ${DNSCRYPT_RESOLVERS} | cut -d "," -f1); do
 
- 			if [[ ${dns_host} == *:* ]]; then
+			if [[ ${dns_host} == *:* ]]; then
 				HOST_IP=$(echo "${dns_host}" | cut -d ":" -f1)
 				HOST_PORT=$(echo "${dns_host}" | cut -d ":" -f2)
 			else
@@ -41,7 +41,6 @@ INIT() {
 
 		done
 	fi
-
 }
 
 FLUSH() {
@@ -77,7 +76,7 @@ FLUSH() {
 		fi
 
 		if [[ ${type} == "LOG" ]]; then
-			echo hello
+
 			iptables -F LOGGING_PREROUTING 2>/dev/null
 			iptables -F LOGGING_LAN 2>/dev/null
 			iptables -F LOGGING_WAN 2>/dev/null
@@ -127,7 +126,6 @@ PORT_KNOCKING() {
 	if [[ ! $(iptables -nL "KNOCKING_${DST_PORT}" 2>/dev/null) ]]; then
 		iptables -N "KNOCKING_${DST_PORT}"
 	fi
-
 }
 
 PREROUTING_SECURTIY() {
@@ -237,14 +235,14 @@ INPUT() {
 			INPUT_IP=${IP}
 		fi
 
-		if [[ ${INPUT_IFACE} == ${interface} ]]; then
+		if [[ ${interface} =~ [0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3} ]]; then
+			IFACE_IP=${interface}
+			interface=${INPUT_IFACE}
+		else
+			IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
+		fi
 
-			if [[ ${interface} == *':'* ]]; then
-				interface=$(echo "${interface}" | cut -d ":" -f1)
-				IFACE_IP=$(echo "${INPUT_IFACE}" | cut -d ":" -f2)
-			else
-				IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
-			fi
+		if [[ ${INPUT_IFACE} == ${interface} ]]; then
 
 			iptables -A INPUT -i ${interface} -p ${PROTOCOL} --dport ${PORT} -s ${INPUT_IP} -d ${IFACE_IP} ${MAC} -m state --state NEW,ESTABLISHED -j ACCEPT
 			iptables -A OUTPUT -o ${interface} -p ${PROTOCOL} --sport ${PORT} -d ${INPUT_IP} -s ${IFACE_IP} -m state --state ESTABLISHED -j ACCEPT
@@ -274,14 +272,16 @@ OUTPUT() {
 			OUTPUT_IP=${IP}
 		fi
 
-		if [[ ${OUTPUT_IFACE} == ${interface} ]]; then
 
-			if [[ ${interface} == *':'* ]]; then
-				interface=$(echo "${interface}" | cut -d ":" -f1)
-				IFACE_IP=$(echo "${OUTPUT_IFACE}" | cut -d ":" -f2)
-			else
-				IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
-			fi
+		if [[ ${interface} =~ [0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3} ]]; then
+			IFACE_IP=${interface}
+			interface=${OUTPUT_IFACE}
+		else
+			IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
+		fi
+
+
+		if [[ ${OUTPUT_IFACE} == ${interface} ]]; then
 
 			iptables -A INPUT -i ${interface} -p ${PROTOCOL} --sport ${PORT} -s ${LAN_IP} -d ${IFACE_IP} ${MAC} -m state --state ESTABLISHED -j ACCEPT
 			iptables -A OUTPUT -o ${interface} -p ${PROTOCOL} --dport ${PORT} -d ${LAN_IP} -s ${IFACE_IP} -m state --state NEW,ESTABLISHED -j ACCEPT
