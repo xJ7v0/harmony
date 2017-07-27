@@ -2,7 +2,7 @@
 # Description: An easy to use firewall builder for computers using dual nics or just one
 # Dependencies: iptables, arptables (optional)
 
-# Change this if needed to be
+# Change this if needed to be if planning on using dnscrypt-proxy in your setup
 DNSCRYPT_RESOLVERS="/usr/share/dnscrypt-proxy/dnscrypt-resolvers.csv"
 
 OPT="${1}"
@@ -198,7 +198,7 @@ PREROUTING_SECURTIY() {
 	fi
 }
 
-# To be changed
+# Use only if diagnosing connection issues on the loopback interface!
 DEFAULT_LO() {
 	iptables -A INPUT -i lo -j ACCEPT
 	iptables -A OUTPUT -o lo -j ACCEPT
@@ -247,7 +247,7 @@ INPUT() {
 	done
 }
 
-# This allows the router to connect to other servers from any interface
+# This allow the router to connect to other servers from any interface
 OUTPUT() {
 	IFACE="${1}"
 	IP="${2}"
@@ -361,8 +361,15 @@ ACL_SERVICES() {
 	done
 }
 
+### LO NOTES
+### First a connection leaves // client:**** -> server:80			ACL_LO_CLIENT()
+### Then a connection is received // server:80 <- client:****			ACL_LO_SERVER()
+### Next server tries to connect back // server:80 -> client:****		ACL_LO_SERVER()
+### Finally client establishes the connection // client:**** <- server:80	ACL_LO_CLIENT()
+
+
 # For the time being, we need a special function for ACL'ing loopback
-ACL_LO() {
+ACL_LO_CLIENT() {
 
 	IP="${1}"
 	PORT="${2}"
@@ -382,19 +389,34 @@ ACL_LO() {
 		GROUP="-m owner --gid-owner ${GROUP}"
 	fi
 
-
-	# first a connection leaves // client:**** -> server:80
-	iptables -A OUTPUT -o lo -p ${PROTOCOL} -s ${IP} -d ${IP} --dport ${PORT} ${USER} ${GROUP} -j ACCEPT
-	# then a connection is received // server:80 <- client:****
-	iptables -A INPUT -i lo -p ${PROTOCOL} -d ${IP} -s ${IP} --dport ${PORT} -j ACCEPT
-	# next server tries to connect back // server:80 -> client:****
-	iptables -A OUTPUT -o lo -p ${PROTOCOL} -s ${IP} -d ${IP} --sport ${PORT} ${USER} ${GROUP} -j ACCEPT
-	# finally client establishes the connection // client:**** <- server:80
-	iptables -A INPUT -i lo -p ${PROTOCOL} -d ${IP} -s ${IP} --sport ${PORT} -j ACCEPT
-
-
+	iptables -A OUTPUT -o lo -p ${PROTOCOL} -s ${IP} -d ${IP} --dport ${PORT} ${USER} ${GROUP} -m state --state NEW,ESTABLISHED -j ACCEPT
+	iptables -A INPUT -i lo -p ${PROTOCOL} -d ${IP} -s ${IP} --sport ${PORT} -m state --state ESTABLISHED -j ACCEPT
 }
 
+# A server function to prevent reduntant rules
+ACL_LO_SERVER() {
+
+	IP="${1}"
+	PORT="${2}"
+	USER_GROUP="${3}"
+	PROTOCOL="${4}"
+	IFS=' 	
+'
+
+	USER=$(echo ${USER_GROUP} | cut -zd ':' -f1)
+	GROUP=$(echo ${USER_GROUP} | cut -zd ':' -f2)
+
+	if [ ! -z ${USER} ]; then
+		USER="-m owner --uid-owner ${USER}"
+	fi
+
+	if [ ! -z ${GROUP} ]; then
+		GROUP="-m owner --gid-owner ${GROUP}"
+	fi
+
+	iptables -A INPUT -i lo -p ${PROTOCOL} -d ${IP} -s ${IP} --dport ${PORT} -m state --state NEW,ESTABLISHED -j ACCEPT
+	iptables -A OUTPUT -o lo -p ${PROTOCOL} -s ${IP} -d ${IP} --sport ${PORT} ${USER} ${GROUP} -m state --state ESTABLISHED -j ACCEPT
+}
 
 LOG(){
 
