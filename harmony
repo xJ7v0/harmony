@@ -48,7 +48,7 @@ FLUSH() {
 	for type in ${TYPE}; do
 
 
-		if [[ ${type} == "ALL" ]]; then
+		if [[ ${type} == "DEFAULT" ]]; then
 
 			iptables -F
 			iptables -X
@@ -77,29 +77,27 @@ FLUSH() {
 
 		if [[ ${type} == "LOG" ]]; then
 
-			iptables -F LOGGING_PREROUTING 2>/dev/null
-			iptables -F LOGGING_LAN 2>/dev/null
-			iptables -F LOGGING_WAN 2>/dev/null
-			iptables -F LOGGING_FORWARD 2>/dev/null
-			iptables -F LOGGING_POSTROUTING 2>/dev/null
+			for chain in $(iptables -nvL | grep -ai chain | cut -d " " -f2 | grep -ai log); do
+				iptables -F "${chain}"
+				iptables -X "${chain}"
 
-			iptables -X LOGGING_PREROUTING 2>/dev/null
-			iptables -X LOGGING_LAN 2>/dev/null
-			iptables -X LOGGING_WAN 2>/dev/null
-			iptables -X LOGGING_FORWARD 2>/dev/null
-			iptables -X LOGGING_POSTROUTING 2>/dev/null
+			done
 		fi
 
-		if [[ ${type} == "DEFAULT" ]]; then
-			iptables -t nat -F
-			iptables -t nat -X
-			iptables -t mangle -F
-			iptables -t mangle -X
 
-			iptables -F INPUT
-			iptables -F OUTPUT
-			iptables -F FORWARD
+		if [[ ${type} == "ALL" ]]; then
+
+			for chain in $(iptables -nvL | grep -ai chain | cut -d " " -f2); do
+				iptables -F "${chain}"
+				iptables -X "${chain}"
+			done
+			# need to do this twice just incase if it doesnt do it right the first time
+			for chain in $(iptables -nvL | grep -ai chain | cut -d " " -f2); do
+				iptables -F "${chain}"
+				iptables -X "${chain}"
+			done
 		fi
+
 
 	done
 
