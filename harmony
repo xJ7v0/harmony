@@ -91,7 +91,10 @@ FLUSH() {
 				iptables -F "${chain}"
 				iptables -X "${chain}"
 			done
+
 			# need to do this twice just incase if it doesnt do it right the first time
+			# A step forward would be to delete rules that are cross chained
+			# or load a default config into iptables
 			for chain in $(iptables -nvL | grep -ai chain | cut -d " " -f2); do
 				iptables -F "${chain}"
 				iptables -X "${chain}"
@@ -201,10 +204,6 @@ DEFAULT_LO() {
 	iptables -A OUTPUT -o lo -j ACCEPT
 }
 
-#ACL_LO() {
-
-
-#}
 
 #ACL_DNS() {
 #	if [ ! -d $(dirname "${DNS_FILE}") ]; then
@@ -317,7 +316,7 @@ FORWARD_NAT() {
 	done
 }
 
-# This allows which user and group on the router can connect to what service
+# This allows which user and group can connect to what service
 ACL_SERVICES() {
 	IFACE="${1}"
 	IP="${2}"
@@ -361,6 +360,41 @@ ACL_SERVICES() {
 		fi
 	done
 }
+
+# For the time being, we need a special function for ACL'ing loopback
+ACL_LO() {
+
+	IP="${1}"
+	PORT="${2}"
+	USER_GROUP="${3}"
+	PROTOCOL="${4}"
+	IFS=' 	
+'
+
+	USER=$(echo ${USER_GROUP} | cut -zd ':' -f1)
+	GROUP=$(echo ${USER_GROUP} | cut -zd ':' -f2)
+
+	if [ ! -z ${USER} ]; then
+		USER="-m owner --uid-owner ${USER}"
+	fi
+
+	if [ ! -z ${GROUP} ]; then
+		GROUP="-m owner --gid-owner ${GROUP}"
+	fi
+
+
+	# first a connection leaves // client:**** -> server:80
+	iptables -A OUTPUT -o lo -p ${PROTOCOL} -s ${IP} -d ${IP} --dport ${PORT} ${USER} ${GROUP} -j ACCEPT
+	# then a connection is received // server:80 <- client:****
+	iptables -A INPUT -i lo -p ${PROTOCOL} -d ${IP} -s ${IP} --dport ${PORT} -j ACCEPT
+	# next server tries to connect back // server:80 -> client:****
+	iptables -A OUTPUT -o lo -p ${PROTOCOL} -s ${IP} -d ${IP} --sport ${PORT} ${USER} ${GROUP} -j ACCEPT
+	# finally client establishes the connection // client:**** <- server:80
+	iptables -A INPUT -i lo -p ${PROTOCOL} -d ${IP} -s ${IP} --sport ${PORT} -j ACCEPT
+
+
+}
+
 
 LOG(){
 
