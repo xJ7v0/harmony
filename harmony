@@ -85,21 +85,11 @@ FLUSH() {
 		fi
 
 
-		if [[ ${type} == "ALL" ]]; then
-
-			for chain in $(iptables -nvL | grep -ai chain | cut -d " " -f2); do
-				iptables -F "${chain}"
-				iptables -X "${chain}"
-			done
-
-			# need to do this twice just incase if it doesnt do it right the first time
-			# A step forward would be to delete rules that are cross chained
-			# or load a default config into iptables
-			for chain in $(iptables -nvL | grep -ai chain | cut -d " " -f2); do
-				iptables -F "${chain}"
-				iptables -X "${chain}"
-			done
-		fi
+#		if [[ ${type} == "ALL" ]]; then
+#
+#			iptables-restore < <(printf "%s\n%s\n%s\n" "-P INPUT DROP" "-P FORWARD DROP" "-P OUTPUT DROP")
+#
+#		fi
 
 
 	done
@@ -247,7 +237,7 @@ INPUT() {
 	done
 }
 
-# This allow the router to connect to other servers from any interface
+# This allows the router to connect to other servers from any interface
 OUTPUT() {
 	IFACE="${1}"
 	IP="${2}"
@@ -286,7 +276,6 @@ OUTPUT() {
 		fi
 	done
 }
-
 
 # This allows lan clients to use the internet
 FORWARD_NAT() {
