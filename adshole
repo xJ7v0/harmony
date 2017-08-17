@@ -4,10 +4,7 @@
 # into a dnsmasq config file or a hosts file for your OS
 OPT="${1}"
 
-# Temporary Master list
-ADSHOLE_TMP="/tmp/adshole-tmp"
-# Final Master list, after everything is sorted and uniqe
-MASTER="/tmp/adshole-master"
+DNSMASQ_DIR="/etc/dnsmasq.d/"
 
 # Variable that holds the list of files to use for our transformation, can be added
 LIST="http://mirror1.malwaredomains.com/files/justdomains
@@ -31,9 +28,6 @@ http://www.malwaredomainlist.com/hostslist/hosts.txt
 http://crimeflare.net:82/domains/ad-farm.zip
 http://crimeflare.net:82/domains/ipout.zip"
 
-if [ -f ${MASTER} ];then
-	rm -rf ${MASTER}
-fi
 
 # Unfortunately some sites only use zip files, so we must unzip them and use a temp file.
 ZIP_TRAN() {
@@ -41,60 +35,75 @@ ZIP_TRAN() {
 
 	if [ "${TYPE}" == "DNSMASQ" ]; then
 
-		FILE=$(echo /tmp/$(basename "${i}"))
+		FILE=$(echo /tmp/$(basename "${HOST}"))
 		echo "${HOST}"
 
 		wget -q "${HOST}" -O "${FILE}"
 		unzip -p "${FILE}" | egrep -v "<.*>|127.0.0.1 localhost|=" | sed -e 's/\t/ /g' -e 's/#.*$//g' -e '/^$/d' |\
-		cut -d " " -f2- | cut -d " " -f1 |sed -e "s/[[:space:]]\+//g"  -e 's/^/server=\//' -e 's/$/\//' >> "${ADSHOLE_TMP}"
+		cut -d " " -f2- | cut -d " " -f1 |sed -e "s/[[:space:]]\+//g"  -e 's/^/server=\//' -e 's/$/\//' >> "${DNSMASQ_DIR}/${FILE_NAME}"
 
 		rm "${FILE}"
 
 	elif [ "${TYPE}" == "HOSTS" ]; then
 
-		FILE=$(echo /tmp/$(basename "${i}"))
+		FILE=$(echo /tmp/$(basename "${HOST}"))
 		echo "${HOST}"
 		wget -q "${HOST}" -O "${FILE}"
 
 		unzip -p "${FILE}" | egrep -v "<.*>|127.0.0.1 localhost|=" | sed -e 's/\t/ /g' -e 's/#.*$//g' -e '/^$/d' |\
 		cut -d " " -f2- | cut -d " " -f1 | sed -e "s/[[:space:]]\+//g" -e 's/^/0.0.0.0 /' >> "${ADSHOLE_TMP}"
 
-		rm ${FILE}
+		rm "${FILE}"
 	fi
 
 }
 
 TEXT_TRAN() {
 	HOST="${1}"
+
 	if [ "${TYPE}" == "DNSMASQ" ]; then
 		# Apparently its too abstract to put sed commands in a variable then call the variable as arguments for sed.
 		# So it makes it harder for a person to add to the script for other formats, we also have extra code that is useless
 		#SED_CMD="-e 's/^/server=\//' -e 's/$/\//'"
-		# Walk through the list, output to stdout, clean whitespaces and garbage, then transform to file format
 
+		# output to stdout, clean whitespaces and garbage, then transform to file format
 		echo "${HOST}"
 		wget -q "${HOST}" -O - | egrep -v "<.*>|127.0.0.1 localhost|=" | sed -e 's/\t/ /g' -e 's/#.*$//g' -e '/^$/d' |\
-		cut -d " " -f2- | cut -d " " -f1 | sed -e "s/[[:space:]]\+//g"  -e 's/^/server=\//' -e 's/$/\//' >> "${ADSHOLE_TMP}"
+		cut -d " " -f2- | cut -d " " -f1 | sed -e "s/[[:space:]]\+//g"  -e 's/^/server=\//' -e 's/$/\//' >> "${DNSMASQ_DIR}/${FILE_NAME}"
 
 	elif [ "${TYPE}" == "HOSTS" ]; then
-		# Use 0.0.0.0 because we dont want to overload localhost
+		# Use 0.0.0.0 because we dont want to overload localhost or interfere with http servers on the host machine
 		echo "${HOST}"
 		wget -q "${HOST}" -O - | egrep -v "<.*>|127.0.0.1 localhost|=" | sed -e 's/\t/ /g' -e 's/#.*$//g' -e '/^$/d' |\
-		cut -d " " -f2- | cut -d " " -f1 | sed -e "s/[[:space:]]\+//g" -e 's/^/0.0.0.0 /' >> "${ADSHOLE_TMP}"
+		cut -d " " -f2- | cut -d " " -f1 | sed -e "s/[[:space:]]\+//g" -e 's/^/0.0.0.0 /' >> "${TMP_HOSTS}"
 	fi
 
-	if [ -f "${ADSHOLE_TMP}" ]; then
-		sort -u "${ADSHOLE_TMP}" | tail -n +4 > "${MASTER}"
+}
 
-		sleep 2s && rm "${ADSHOLE_TMP}"
+GET_FILE_NAME() {
+	URL="${1}"
+
+	if [[ "${URL}" == *github* ]]; then
+		F1="$(sed -e 's/http.*:\/\/.*.com\///' -e 's/\/.*//' <<< "${URL}")"
+		F2="$(basename ${URL})"
+	else
+		F1="$(sed 's/.*:\/\///' <<< "${URL}" | cut -d / -f1)"
+		F2="$(basename $(awk -F= '{print $NF}' <<< "${URL}"))"
 	fi
+
+	FILE_NAME="${F1}_${F2%.*}.conf"
 }
 
 ADSHOLE() {
 
 	for url in ${LIST}; do
+		GET_FILE_NAME "${url}"
 		grep -zq .zip <(basename "${url}") && ZIP_TRAN "${url}" || TEXT_TRAN "${url}"
 	done
+
+	if [ "${TYPE}" == "DNSMASQ" ]; then
+		 awk '!Line[$0]++ { print > FILENAME "_G"}' ${DNSMASQ_DIR}/*.conf
+	fi
 }
 
 USAGE() {
@@ -118,9 +127,9 @@ case ${OPT} in
 
 	"-h") USAGE;;
 
-	"-m") STYPE="DNSMASQ";;
+	"-m") TYPE="DNSMASQ";;
 
-	"-M") STYPE="HOSTS";;
+	"-M") TYPE="HOSTS";;
 
 	*) USAGE;;
 

@@ -36,7 +36,8 @@ INIT() {
 			iptables -A OUT_DNSCRYPT_ACL -o ${IFACE} -p tcp --dport ${HOST_PORT} -s ${IFACE_IP} -d ${HOST_IP} -m owner --uid-owner dnscrypt -m owner --gid-owner dnscrypt -m state --state NEW,ESTABLISHED -j ACCEPT
 			iptables -A IN_DNSCRYPT_ACL -i ${IFACE} -p tcp --sport ${HOST_PORT} -d ${IFACE_IP} -s ${HOST_IP} -m state --state ESTABLISHED -j ACCEPT
 			# UDP
-			iptables -A OUT_DNSCRYPT_ACL -o ${IFACE} -p udp --dport ${HOST_PORT} -s ${IFACE_IP} -d ${HOST_IP} -m owner --uid-owner dnscrypt -m owner --gid-owner dnscrypt -m state --state NEW,ESTABLISHED -j ACCEPT
+			#iptables -A OUT_DNSCRYPT_ACL -o ${IFACE} -p udp --dport ${HOST_PORT} -s ${IFACE_IP} -d ${HOST_IP} -m owner --uid-owner dnscrypt -m owner --gid-owner dnscrypt -m state --state NEW,ESTABLISHED -j ACCEPT
+			iptables -A OUT_DNSCRYPT_ACL -o ${IFACE} -p udp --dport ${HOST_PORT} -s ${IFACE_IP} -d ${HOST_IP} -m state --state NEW,ESTABLISHED -j ACCEPT
 			iptables -A IN_DNSCRYPT_ACL -i ${IFACE} -p udp --sport ${HOST_PORT} -d ${IFACE_IP} -s ${HOST_IP} -m state --state ESTABLISHED -j ACCEPT
 
 		done
@@ -85,13 +86,6 @@ FLUSH() {
 		fi
 
 
-#		if [[ ${type} == "ALL" ]]; then
-#
-#			iptables-restore < <(printf "%s\n%s\n%s\n" "-P INPUT DROP" "-P FORWARD DROP" "-P OUTPUT DROP")
-#
-#		fi
-
-
 	done
 
 	# Default Policies
@@ -106,7 +100,6 @@ FLUSH() {
 
 
 #	if [ ! -f ${DNS_FILE} ];
-
 
 }
 
