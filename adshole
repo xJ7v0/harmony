@@ -4,7 +4,8 @@
 # into a dnsmasq config file or a hosts file for your OS
 OPT="${1}"
 
-DNSMASQ_DIR="/etc/dnsmasq.d/"
+#DNSMASQ_DIR="/etc/dnsmasq.d/"
+#${DNSMASQ_DIR}/${FILE_NAME}
 
 # Variable that holds the list of files to use for our transformation, can be added
 LIST="http://mirror1.malwaredomains.com/files/justdomains
@@ -28,38 +29,33 @@ http://www.malwaredomainlist.com/hostslist/hosts.txt
 http://crimeflare.net:82/domains/ad-farm.zip
 http://crimeflare.net:82/domains/ipout.zip"
 
-
 # Unfortunately some sites only use zip files, so we must unzip them and use a temp file.
 ZIP_TRAN() {
 	HOST="${1}"
 
+	FILE=$(echo /tmp/$(basename "${HOST}"))
+	echo "${HOST}"
+	wget -q "${HOST}" -O "${FILE}"
+
 	if [ "${TYPE}" == "DNSMASQ" ]; then
 
-		FILE=$(echo /tmp/$(basename "${HOST}"))
-		echo "${HOST}"
-
-		wget -q "${HOST}" -O "${FILE}"
 		unzip -p "${FILE}" | egrep -v "<.*>|127.0.0.1 localhost|=" | sed -e 's/\t/ /g' -e 's/#.*$//g' -e '/^$/d' |\
-		cut -d " " -f2- | cut -d " " -f1 |sed -e "s/[[:space:]]\+//g"  -e 's/^/server=\//' -e 's/$/\//' >> "${DNSMASQ_DIR}/${FILE_NAME}"
-
-		rm "${FILE}"
+		cut -d " " -f2- | cut -d " " -f1 | sed -e "s/[[:space:]]\+//g"  -e 's/^/server=\//' -e 's/$/\//' >> "${MASTER}"
 
 	elif [ "${TYPE}" == "HOSTS" ]; then
 
-		FILE=$(echo /tmp/$(basename "${HOST}"))
-		echo "${HOST}"
-		wget -q "${HOST}" -O "${FILE}"
-
 		unzip -p "${FILE}" | egrep -v "<.*>|127.0.0.1 localhost|=" | sed -e 's/\t/ /g' -e 's/#.*$//g' -e '/^$/d' |\
-		cut -d " " -f2- | cut -d " " -f1 | sed -e "s/[[:space:]]\+//g" -e 's/^/0.0.0.0 /' >> "${ADSHOLE_TMP}"
+		cut -d " " -f2- | cut -d " " -f1 | sed -e "s/[[:space:]]\+//g" -e 's/^/0.0.0.0 /' >> "${MASTER}"
 
-		rm "${FILE}"
 	fi
+
+	rm "${FILE}"
 
 }
 
 TEXT_TRAN() {
 	HOST="${1}"
+	echo "${HOST}"
 
 	if [ "${TYPE}" == "DNSMASQ" ]; then
 		# Apparently its too abstract to put sed commands in a variable then call the variable as arguments for sed.
@@ -67,15 +63,13 @@ TEXT_TRAN() {
 		#SED_CMD="-e 's/^/server=\//' -e 's/$/\//'"
 
 		# output to stdout, clean whitespaces and garbage, then transform to file format
-		echo "${HOST}"
 		wget -q "${HOST}" -O - | egrep -v "<.*>|127.0.0.1 localhost|=" | sed -e 's/\t/ /g' -e 's/#.*$//g' -e '/^$/d' |\
-		cut -d " " -f2- | cut -d " " -f1 | sed -e "s/[[:space:]]\+//g"  -e 's/^/server=\//' -e 's/$/\//' >> "${DNSMASQ_DIR}/${FILE_NAME}"
+		cut -d " " -f2- | cut -d " " -f1 | sed -e "s/[[:space:]]\+//g"  -e 's/^/server=\//' -e 's/$/\//' >> "${MASTER}"
 
 	elif [ "${TYPE}" == "HOSTS" ]; then
 		# Use 0.0.0.0 because we dont want to overload localhost or interfere with http servers on the host machine
-		echo "${HOST}"
 		wget -q "${HOST}" -O - | egrep -v "<.*>|127.0.0.1 localhost|=" | sed -e 's/\t/ /g' -e 's/#.*$//g' -e '/^$/d' |\
-		cut -d " " -f2- | cut -d " " -f1 | sed -e "s/[[:space:]]\+//g" -e 's/^/0.0.0.0 /' >> "${TMP_HOSTS}"
+		cut -d " " -f2- | cut -d " " -f1 | sed -e "s/[[:space:]]\+//g" -e 's/^/0.0.0.0 /' >> "${MASTER}"
 	fi
 
 }
@@ -97,19 +91,21 @@ GET_FILE_NAME() {
 ADSHOLE() {
 
 	for url in ${LIST}; do
-		GET_FILE_NAME "${url}"
-		grep -zq .zip <(basename "${url}") && ZIP_TRAN "${url}" || TEXT_TRAN "${url}"
+		#GET_FILE_NAME "${url}"
+		grep -zqiF .zip <(basename "${url}") && ZIP_TRAN "${url}" || TEXT_TRAN "${url}"
 	done
 
-	if [ "${TYPE}" == "DNSMASQ" ]; then
-		 awk '!Line[$0]++ { print > FILENAME "_G"}' ${DNSMASQ_DIR}/*.conf
-	fi
+	#if [ "${TYPE}" == "DNSMASQ" ]; then
+	#	 awk '!Line[$0]++ { print > FILENAME "_G"}' ${DNSMASQ_DIR}/*.conf
+	#fi
+
+	sort -u "${MASTER}" -o "${MASTER}"
 }
 
 USAGE() {
 
         echo """
-$(basename $0): - Pull in lists from various websites converts to dnsmasq format or host file
+$(basename $0): - Pull in lists from various websites and converts them to dnsmasq format or host file
 	Usage: $(basename $0)  OPTION
 
 OPTION
@@ -120,16 +116,16 @@ OPTION
 
 	-M	creates a master list for the OS's host file
 """
-
+	exit 1
 }
 
 case ${OPT} in
 
 	"-h") USAGE;;
 
-	"-m") TYPE="DNSMASQ";;
+	"-m") TYPE="DNSMASQ"; MASTER="/tmp/dnsmasq_adshole.conf";;
 
-	"-M") TYPE="HOSTS";;
+	"-M") TYPE="HOSTS"; MASTER="/tmp/hosts_adshole";;
 
 	*) USAGE;;
 

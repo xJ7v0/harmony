@@ -326,8 +326,8 @@ ACL_SERVICES() {
 				IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
 			fi
 
-			USER=$(echo ${USER_GROUP} | cut -zd ':' -f1)
-			GROUP=$(echo ${USER_GROUP} | cut -zd ':' -f2)
+			USER=$(echo ${USER_GROUP}  | cut -zd ':' -f1 | sed 's/\x0//g')
+			GROUP=$(echo ${USER_GROUP} | cut -zd ':' -f2 | sed 's/\x0//g')
 
 			if [ ! -z ${USER} ]; then
 				USER="-m owner --uid-owner ${USER}"
@@ -360,8 +360,8 @@ ACL_LO_CLIENT() {
 	IFS=' 	
 '
 
-	USER=$(echo ${USER_GROUP} | cut -zd ':' -f1)
-	GROUP=$(echo ${USER_GROUP} | cut -zd ':' -f2)
+	USER=$(echo ${USER_GROUP}  | cut -zd ':' -f1 | sed 's/\x0//g')
+	GROUP=$(echo ${USER_GROUP} | cut -zd ':' -f2 | sed 's/\x0//g')
 
 	if [ ! -z ${USER} ]; then
 		USER="-m owner --uid-owner ${USER}"
@@ -385,8 +385,8 @@ ACL_LO_SERVER() {
 	IFS=' 	
 '
 
-	USER=$(echo ${USER_GROUP} | cut -zd ':' -f1)
-	GROUP=$(echo ${USER_GROUP} | cut -zd ':' -f2)
+	USER=$(echo ${USER_GROUP}  | cut -zd ':' -f1 | sed 's/\x0//g')
+	GROUP=$(echo ${USER_GROUP} | cut -zd ':' -f2 | sed 's/\x0//g')
 
 	if [ ! -z ${USER} ]; then
 		USER="-m owner --uid-owner ${USER}"
@@ -447,7 +447,11 @@ LOG(){
 }
 
 SAVE() {
-	service iptables restart
+	# Sysvinit/systemd
+	[[ $(which service 2>/dev/null) ]] && service iptables restart || \
+	# openrc
+	[[ $(which rc-service 2>/dev/null) ]] && rc-service iptables restart
+
 }
 
 USAGE() {
