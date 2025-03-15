@@ -2,107 +2,59 @@
 # Name: adshole
 # Description: An easy to use script that will download various files to transform
 # into a dnsmasq config file or a hosts file for your OS
-OPT="${1}"
+option="${1}"
 
-#DNSMASQ_DIR="/etc/dnsmasq.d/"
-#${DNSMASQ_DIR}/${FILE_NAME}
+alias sed_cmd_1="sed -e 's/\t/ /g' -e 's/#.*$//g' -e '/^$/d' -e 's/||//g' -e 's/\^//g'"
 
-# Variable that holds the list of files to use for our transformation, can be added
-LIST="http://mirror1.malwaredomains.com/files/justdomains
-http://mirror1.malwaredomains.com/files/immortal_domains.txt
-http://sysctl.org/cameleon/hosts
-https://zeustracker.abuse.ch/blocklist.php?download=domainblocklist
-https://s3.amazonaws.com/lists.disconnect.me/simple_ad.txt
-https://s3.amazonaws.com/lists.disconnect.me/simple_tracking.txt
-https://s3.amazonaws.com/lists.disconnect.me/simple_malware.txt
-https://s3.amazonaws.com/lists.disconnect.me/simple_malvertising.txt
-https://hosts-file.net/ad_servers.txt
-https://raw.githubusercontent.com/crazy-max/WindowsSpyBlocker/master/data/hosts/win10/spy.txt
-https://raw.githubusercontent.com/quidsup/notrack/master/trackers.txt
-https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts
-https://raw.githubusercontent.com/CHEF-KOCH/NSABlocklist/master/HOSTS.txt
-https://pgl.yoyo.org/as/serverlist.php?showintro=0;hostformat=hosts
-https://www.malwaredomainlist.com/hostslist/hosts.txt
-http://winhelp2002.mvps.org/hosts.txt
-http://someonewhocares.org/hosts/zero/
-http://www.malwaredomainlist.com/hostslist/hosts.txt
-http://crimeflare.net:82/domains/ad-farm.zip
-http://crimeflare.net:82/domains/ipout.zip"
+# Only one of these sed commands is used for sed_cmd_2
+alias sed_cmd_hosts="sed -e "s/[[:space:]]\+//g" -e 's/^/0.0.0.0 /'"
+alias sed_cmd_dnsmasq="sed -e "s/[[:space:]]\+//g"  -e 's/^/server=\//' -e 's/$/\//'"
 
 # Unfortunately some sites only use zip files, so we must unzip them and use a temp file.
-ZIP_TRAN() {
-	HOST="${1}"
+zip_tran() {
+	host="${1}"
 
-	FILE=$(echo /tmp/$(basename "${HOST}"))
-	echo "${HOST}"
-	wget -q "${HOST}" -O "${FILE}"
+	file=$(echo /tmp/$(basename "${host}"))
+	wget -q "${host}" -O "${file}"
 
-	if [ "${TYPE}" == "DNSMASQ" ]; then
+	unzip -p "${file}" | egrep -v "<.*>|127.0.0.1 localhost|=" | sed_cmd_1 |\
+	cut -d " " -f2- | cut -d " " -f1 | sed_cmd_2 >> "${master}"
 
-		unzip -p "${FILE}" | egrep -v "<.*>|127.0.0.1 localhost|=" | sed -e 's/\t/ /g' -e 's/#.*$//g' -e '/^$/d' |\
-		cut -d " " -f2- | cut -d " " -f1 | sed -e "s/[[:space:]]\+//g"  -e 's/^/server=\//' -e 's/$/\//' >> "${MASTER}"
-
-	elif [ "${TYPE}" == "HOSTS" ]; then
-
-		unzip -p "${FILE}" | egrep -v "<.*>|127.0.0.1 localhost|=" | sed -e 's/\t/ /g' -e 's/#.*$//g' -e '/^$/d' |\
-		cut -d " " -f2- | cut -d " " -f1 | sed -e "s/[[:space:]]\+//g" -e 's/^/0.0.0.0 /' >> "${MASTER}"
-
-	fi
-
-	rm "${FILE}"
-
+	rm "${file}"
 }
 
-TEXT_TRAN() {
-	HOST="${1}"
-	echo "${HOST}"
-
-	if [ "${TYPE}" == "DNSMASQ" ]; then
-		# Apparently its too abstract to put sed commands in a variable then call the variable as arguments for sed.
-		# So it makes it harder for a person to add to the script for other formats, we also have extra code that is useless
-		#SED_CMD="-e 's/^/server=\//' -e 's/$/\//'"
-
-		# output to stdout, clean whitespaces and garbage, then transform to file format
-		wget -q "${HOST}" -O - | egrep -v "<.*>|127.0.0.1 localhost|=" | sed -e 's/\t/ /g' -e 's/#.*$//g' -e '/^$/d' |\
-		cut -d " " -f2- | cut -d " " -f1 | sed -e "s/[[:space:]]\+//g"  -e 's/^/server=\//' -e 's/$/\//' >> "${MASTER}"
-
-	elif [ "${TYPE}" == "HOSTS" ]; then
-		# Use 0.0.0.0 because we dont want to overload localhost or interfere with http servers on the host machine
-		wget -q "${HOST}" -O - | egrep -v "<.*>|127.0.0.1 localhost|=" | sed -e 's/\t/ /g' -e 's/#.*$//g' -e '/^$/d' |\
-		cut -d " " -f2- | cut -d " " -f1 | sed -e "s/[[:space:]]\+//g" -e 's/^/0.0.0.0 /' >> "${MASTER}"
-	fi
-
+# Transform text files
+text_tran() {
+	# output to stdout, clean whitespaces and garbage, then transform to file format
+	wget -q "${1}" -O - | egrep -v "<.*>|127.0.0.1 localhost|=" | sed_cmd_1 |\
+	# Use 0.0.0.0 because we dont want to overload localhost or
+	# interfere with http servers on the host machine
+	cut -d " " -f2- | cut -d " " -f1 | sed_cmd_2 >> "${master}"
 }
 
-GET_FILE_NAME() {
-	URL="${1}"
+adshole() {
 
-	if [[ "${URL}" == *github* ]]; then
-		F1="$(sed -e 's/http.*:\/\/.*.com\///' -e 's/\/.*//' <<< "${URL}")"
-		F2="$(basename ${URL})"
+	which wget 2>&1 > /dev/null && dl_cmd="wget -qO-" || dl_cmd="curl -Ss"
+
+	if [[ $(which wget 2>/dev/null) ]]; then
+		dlcmd="wget -qc"
 	else
-		F1="$(sed 's/.*:\/\///' <<< "${URL}" | cut -d / -f1)"
-		F2="$(basename $(awk -F= '{print $NF}' <<< "${URL}"))"
+		dlcmd="curl -s"
 	fi
 
-	FILE_NAME="${F1}_${F2%.*}.conf"
-}
-
-ADSHOLE() {
+	if [[ $(id -u) == 0 ]]; then
+		dl_cmd="su nobody -pc '${dl_cmd}'"
+	fi
 
 	for url in ${LIST}; do
-		#GET_FILE_NAME "${url}"
-		grep -zqiF .zip <(basename "${url}") && ZIP_TRAN "${url}" || TEXT_TRAN "${url}"
+		grep -zqiF .zip <(basename "${url}") && zip_tran "${url}" ||\
+		text_tran "${url}"
 	done
 
-	#if [ "${TYPE}" == "DNSMASQ" ]; then
-	#	 awk '!Line[$0]++ { print > FILENAME "_G"}' ${DNSMASQ_DIR}/*.conf
-	#fi
-
-	sort -u "${MASTER}" -o "${MASTER}"
+	sort -u "${master}" -o "${master}"
 }
 
-USAGE() {
+usage() {
 
         echo """
 $(basename $0): - Pull in lists from various websites and converts them to dnsmasq format or host file
@@ -119,16 +71,14 @@ OPTION
 	exit 1
 }
 
-case ${OPT} in
+[[ "${BASH_SOURCE[0]}" == "${0}" ]] && \
+case ${option} in
 
-	"-h") USAGE;;
+	"-h") usage;;
 
-	"-m") TYPE="DNSMASQ"; MASTER="/tmp/dnsmasq_adshole.conf";;
+	"-m") master="/tmp/dnsmasq_adshole.conf"; alias sed_cmd_2=sed_cmd_dnsmasq; adshole;;
 
-	"-M") TYPE="HOSTS"; MASTER="/tmp/hosts_adshole";;
+	"-M") master="/tmp/hosts_adshole"; alias sed_cmd_2=sed_cmd_hosts; adshole;;
 
-	*) USAGE;;
-
+	*) usage;;
 esac
-
-ADSHOLE
