@@ -1,0 +1,11 @@
+#!/bin/bash
+WHOIS_HOST1="whois.radb.net"
+WHOIS_HOST2="whois.cymru.com"
+
+getasnum() { whois -h "$WHOIS_HOST1" "$1" }
+getipblocks() { whois -h "$WHOIS_HOST2" "!gAS$1" | tr ' ' '\n' }
+
+# Generate a dialog(cli)/whiptail(cli)/zenity(gtk)/yad(zenity fork)/kdialog(kde) List
+
+# Get list
+# www.user-agets.org/allagents.csv

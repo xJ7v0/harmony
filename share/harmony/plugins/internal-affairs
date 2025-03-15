@@ -1,0 +1,46 @@
+#!/bin/bash
+LOG() {
+
+	if [[ ${LOGGING_PREROUTING} != 0 && ${LOGGING_PREROUTING} -le 7 ]]; then
+		iptables -N LOGGING_PREROUTING
+		iptables -t nat -A PREROUTING -j LOGGING_PREROUTING
+		iptables -t nat -A PREROUTING -j LOG
+		iptables -t nat -A PREROUTING -j LOG --log-prefix "IPTABLES-Dropped_PREROUTING: " --log-level ${LOGGING_PREROUTING}
+		iptables -A LOGGING_PREROUTING -j DROP
+	fi
+
+	if [[ ${LOGGING_LAN} != 0 && ${LOGGING_LAN} -le 7 ]]; then
+		iptables -N LOGGING_LAN
+		iptables -A INPUT -i ${LAN} -j LOGGING_LAN
+		iptables -A LOGGING_LAN -j LOG --log-prefix "IPTABLES-Dropped_LAN: " --log-level ${LOGGING_LAN}
+		iptables -A LOGGING_LAN -j DROP
+		iptables -A OUTPUT -o ${LAN} -j LOGGING_LAN
+		iptables -A LOGGING_LAN -j LOG --log-prefix "IPTABLES-Dropped_LAN: " --log-level ${LOGGING_LAN}
+		iptables -A LOGGING_LAN -j DROP
+	fi
+
+	if [[ ${LOGGING_WAN} != 0 && ${LOGGING_WAN} -le 7 ]]; then
+		iptables -N LOGGING_WAN
+		iptables -A INPUT -i ${WAN} -j LOGGING_WAN
+		iptables -A LOGGING_WAN -j LOG --log-prefix "IPTABLES-Dropped_WAN: " --log-level ${LOGGING_WAN}
+		iptables -A LOGGING_WAN -j DROP
+		iptables -A OUTPUT -o ${WAN} -j LOGGING_WAN
+		iptables -A LOGGING_WAN -j LOG --log-prefix "IPTABLES-Dropped_WAN: " --log-level ${LOGGING_WAN}
+		iptables -A LOGGING_WAN -j DROP
+	fi
+
+	if [[ ${LOGGING_FORWARD} != 0 && ${LOGGING_FORWARD} -le 7 ]]; then
+		iptables -N LOGGING_FORWARD
+		iptables -A FORWARD -j LOGGING_FORWARD
+		iptables -A LOGGING_FORWARD -j LOG --log-prefix "IPTABLES-Dropped_FORWARD: " --log-level ${LOGGING_FORWARD}
+		iptables -A LOGGING_FORWARD -j DROP
+        fi
+
+	if [[ ${LOGGING_POSTROUTING} != 0 && ${LOGGING_POSTROUTING} -le 7 ]]; then
+		iptables -N LOGGING_POSTROUTING
+		iptables -t nat -A POSTROUTING -j LOGGING_POSTROUTING
+		iptables -t nat -A POSTROUTING -j LOG
+		iptables -t nat -A POSTROUTING -j LOG --log-prefix "IPTABLES-Dropped_POSTROUTING: " --log-level ${LOGGING_POSTROUTING}
+		iptables -A LOGGING_POSTROUTING -j DROP
+        fi
+}

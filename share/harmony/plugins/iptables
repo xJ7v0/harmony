@@ -1,0 +1,310 @@
+#!/bin/bash
+# Description: plugin for iptables
+# Dependencies: iptables, arptables (optional)
+
+OPT="${1}"
+
+OLD_IS="${IFS}"
+IFS=' 	
+'
+
+
+
+FLUSH()
+{
+	TYPE="${1}"
+	for type in ${TYPE}; do
+
+		if [[ ${type} == "DEFAULT" ]]; then
+
+			iptables -F
+			iptables -X
+			iptables -t filter -F
+			iptables -t filter -X
+			iptables -t mangle -F
+			iptables -t mangle -X
+			iptables -t nat -F
+			iptables -t nat -X
+			iptables -t raw -F
+			iptables -t raw -X
+
+			if [ $(which arptables 2>/dev/null) ]; then
+				arptables -F
+				arptables -X
+				arptables -t nat -F
+				arptables -t nat -X
+				arptables -t mangle -F
+				arptables -t mangle -X
+
+				arptables -P INPUT DROP
+				arptables -P OUTPUT DROP
+				arptables -P FORWARD DROP
+			fi
+		fi
+
+		if [[ ${type} == "LOG" ]]; then
+
+			for chain in $(iptables -nvL | grep -ai chain | cut -d " " -f2 | grep -ai log); do
+				iptables -F "${chain}"
+				iptables -X "${chain}"
+
+			done
+		fi
+
+
+	done
+
+	# Default Policies
+	iptables -P INPUT DROP
+	iptables -P OUTPUT DROP
+	iptables -P FORWARD DROP
+
+	iptables -A OUTPUT -j OUT_DNSCRYPT_ACL
+	iptables -A INPUT -j IN_DNSCRYPT_ACL
+
+}
+
+PORT_KNOCKING()
+{
+	COMBO="${1}"
+	DST_PORT="${2}"
+
+	if [[ ! $(iptables -nL "KNOCKING_${DST_PORT}" 2>/dev/null) ]]; then
+		iptables -N "KNOCKING_${DST_PORT}"
+	fi
+}
+
+# Use only if diagnosing connection issues on the loopback interface!
+DEFAULT_LO()
+{
+	iptables -A INPUT -i lo -j ACCEPT
+	iptables -A OUTPUT -o lo -j ACCEPT
+}
+
+
+#ACL_DNS()
+#{
+#	if [ ! -d $(dirname "${DNS_FILE}") ]; then
+#		mkdir -p $(dirname "${DNS_FILE}"
+#}
+
+# This allows connections to servers from any interface
+INPUT()
+{
+	IFACE="${1}"
+	IP="${2}"
+	PORT="${3}"
+	PROTOCOL="${4}"
+
+	if [ ! -z ${5} ]; then
+		MAC="-m mac --mac-source ${5}"
+	fi
+
+	for interface in ${IFACE}; do
+		# interface to ip 'tagging', useful for vlans and/or multiple interfaces
+		if [[ ${IP} == *':'* ]]; then
+			INPUT_IFACE=$(echo ${IP} | cut -d ":" -f1)
+			INPUT_IP=$(echo ${IP} | cut -d ":" -f2)
+		else
+			INPUT_IFACE=${interface}
+			INPUT_IP=${IP}
+		fi
+
+		if [[ ${interface} =~ [0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3} ]]; then
+			IFACE_IP=${interface}
+			interface=${INPUT_IFACE}
+		else
+			IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
+		fi
+
+		if [[ ${INPUT_IFACE} == ${interface} ]]; then
+
+			iptables -A INPUT -i ${interface} -p ${PROTOCOL} --dport ${PORT} -s ${INPUT_IP} -d ${IFACE_IP} ${MAC} -m state --state NEW,ESTABLISHED -j ACCEPT
+			iptables -A OUTPUT -o ${interface} -p ${PROTOCOL} --sport ${PORT} -d ${INPUT_IP} -s ${IFACE_IP} -m state --state ESTABLISHED -j ACCEPT
+		fi
+	done
+}
+
+# This allows the router to connect to other servers from any interface
+OUTPUT()
+{
+	IFACE="${1}"
+	IP="${2}"
+	PORT="${3}"
+	PROTOCOL="${4}"
+
+	if [ ! -z ${5} ]; then
+		MAC="-m mac --mac-source ${5}"
+	fi
+
+	for interface in ${IFACE}; do
+		# interface to ip 'tagging', useful for vlans and/or multiple interfaces
+		if [[ ${IP} == *':'* ]]; then
+			OUTPUT_IFACE=$(echo ${IP} | cut -d ":" -f1)
+			OUTPUT_IP=$(echo ${IP} | cut -d ":" -f2)
+		else
+			OUTPUT_IFACE=${interface}
+			OUTPUT_IP=${IP}
+		fi
+
+
+		if [[ ${interface} =~ [0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3} ]]; then
+			IFACE_IP=${interface}
+			interface=${OUTPUT_IFACE}
+		else
+			IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
+		fi
+
+
+		if [[ ${OUTPUT_IFACE} == ${interface} ]]; then
+
+			iptables -A INPUT -i ${interface} -p ${PROTOCOL} --sport ${PORT} -s ${LAN_IP} -d ${IFACE_IP} ${MAC} -m state --state ESTABLISHED -j ACCEPT
+			iptables -A OUTPUT -o ${interface} -p ${PROTOCOL} --dport ${PORT} -d ${LAN_IP} -s ${IFACE_IP} -m state --state NEW,ESTABLISHED -j ACCEPT
+
+		fi
+	done
+}
+
+# This allows lan clients to use the internet
+FORWARD_NAT()
+{
+	SRC_IFACE="${1}"
+	SRC_IP="${2}"
+	DST_IFACE="${3}"
+	DST_IP="${4}"
+	DST_PORT="${5}"
+	PROTOCOL="${6}"
+
+	for interface in ${SRC_IFACE}; do
+		# interface to ip 'tagging', useful for vlans and/or multiple interfaces
+		if [[ ${SRC_IP} == *':'* ]]; then
+			SRC_IFACE_1=$(echo ${SRC_IP} | cut -d ":" -f1)
+			SRC_IP_1=$(echo ${SRC_IP} | cut -d ":" -f2)
+		else
+			SRC_IFACE_1=${interface}
+			SRC_IP_1=${SRC_IP}
+		fi
+
+		if [[ ${SRC_IFACE_1} == ${interface} ]]; then
+			iptables -A FORWARD -i ${interface} -p ${PROTOCOL} --dport ${DST_PORT} -s ${SRC_IP_1} -d ${DST_IP} -j ACCEPT
+			iptables -A FORWARD -i ${DST_IFACE} -p ${PROTOCOL} --sport ${DST_PORT} -d ${SRC_IP_1} -s ${DST_IP} -j ACCEPT
+			iptables -t nat -A POSTROUTING -o ${DST_IFACE} -j MASQUERADE
+		fi
+	done
+}
+
+# This allows which user and group can connect to what service
+ACL_SERVICES()
+{
+	IFACE="${1}"
+	IP="${2}"
+	PORT="${3}"
+	USER_GROUP="${4}"
+	PROTOCOL="${5}"
+
+	for interface in ${IFACE}; do
+		# interface to ip 'tagging', useful for vlans and/or multiple interfaces
+		if [[ ${IP} == *':'* ]]; then
+			ACL_IFACE=$(echo ${IP} | cut -d ':' -f1)
+			ACL_IP=$(echo ${IP} | cut -d ':' -f2)
+		else
+			ACL_IFACE=${interface}
+			ACL_IP=${IP}
+		fi
+
+		if [[ ${ACL_IFACE} == ${interface} ]]; then
+
+			if [[ ${interface} == *':'* ]]; then
+				interface=$(echo "${interface}" | cut -d ':' -f1)
+				IFACE_IP=$(echo "${ACL_IFACE}" | cut -d ':' -f2)
+			else
+				IFACE_IP="$(ip address show ${interface} | grep -oP '(?<=inet ).*(?=/)')"
+			fi
+
+			USER=$(echo ${USER_GROUP}  | cut -zd ':' -f1 | sed 's/\x0//g')
+			GROUP=$(echo ${USER_GROUP} | cut -zd ':' -f2 | sed 's/\x0//g')
+
+			if [ ! -z ${USER} ]; then
+				USER="-m owner --uid-owner ${USER}"
+			fi
+
+			if [ ! -z ${GROUP} ]; then
+				GROUP="-m owner --gid-owner ${GROUP}"
+			fi
+
+			iptables -A OUTPUT -o ${interface} -p ${PROTOCOL} --dport ${PORT} -s ${IFACE_IP} -d ${ACL_IP} ${USER} ${GROUP} -m state --state NEW,ESTABLISHED -j ACCEPT
+			iptables -A INPUT -i ${interface} -p ${PROTOCOL} --sport ${PORT} -d ${IFACE_IP} -s ${ACL_IP} -m state --state ESTABLISHED -j ACCEPT
+		fi
+	done
+}
+
+### LO NOTES
+### First a connection leaves // client:**** -> server:80			ACL_LO_CLIENT()
+### Then a connection is received // server:80 <- client:****			ACL_LO_SERVER()
+### Next server tries to connect back // server:80 -> client:****		ACL_LO_SERVER()
+### Finally client establishes the connection // client:**** <- server:80	ACL_LO_CLIENT()
+
+
+# For the time being, we need a special function for ACL'ing loopback
+ACL_LO_CLIENT()
+{
+	IP="${1}"
+	PORT="${2}"
+	USER_GROUP="${3}"
+	PROTOCOL="${4}"
+
+	USER=$(echo ${USER_GROUP}  | cut -zd ':' -f1 | sed 's/\x0//g')
+	GROUP=$(echo ${USER_GROUP} | cut -zd ':' -f2 | sed 's/\x0//g')
+
+	if [ ! -z ${USER} ]; then
+		USER="-m owner --uid-owner ${USER}"
+	fi
+
+	if [ ! -z ${GROUP} ]; then
+		GROUP="-m owner --gid-owner ${GROUP}"
+	fi
+
+	iptables -A OUTPUT -o lo -p ${PROTOCOL} -s ${IP} -d ${IP} --dport ${PORT} ${USER} ${GROUP} -m state --state NEW,ESTABLISHED -j ACCEPT
+	iptables -A INPUT -i lo -p ${PROTOCOL} -d ${IP} -s ${IP} --sport ${PORT} -m state --state ESTABLISHED -j ACCEPT
+}
+
+# A server function to prevent reduntant rules
+ACL_LO_SERVER()
+{
+
+	IP="${1}"
+	PORT="${2}"
+	USER_GROUP="${3}"
+	PROTOCOL="${4}"
+
+	USER=$(echo ${USER_GROUP}  | cut -zd ':' -f1 | sed 's/\x0//g')
+	GROUP=$(echo ${USER_GROUP} | cut -zd ':' -f2 | sed 's/\x0//g')
+
+	if [ ! -z ${USER} ]; then
+		USER="-m owner --uid-owner ${USER}"
+	fi
+
+	if [ ! -z ${GROUP} ]; then
+		GROUP="-m owner --gid-owner ${GROUP}"
+	fi
+
+	iptables -A INPUT -i lo -p ${PROTOCOL} -d ${IP} -s ${IP} --dport ${PORT} -m state --state NEW,ESTABLISHED -j ACCEPT
+	iptables -A OUTPUT -o lo -p ${PROTOCOL} -s ${IP} -d ${IP} --sport ${PORT} ${USER} ${GROUP} -m state --state ESTABLISHED -j ACCEPT
+}
+
+ACL_LO()
+{
+	ACL_LO_CLIENT "${1}" "${2}" "${3}" "${4}"
+	ACL_LO_SERVER "${1}" "${2}" "${3}" "${4}"
+}
+
+SAVE()
+{
+	# Sysvinit/systemd
+	[[ $(which service 2>/dev/null) ]] && service iptables restart || \
+	# openrc
+	[[ $(which rc-service 2>/dev/null) ]] && rc-service iptables restart
+
+}
+
+
