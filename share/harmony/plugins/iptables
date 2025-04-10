@@ -2,15 +2,11 @@
 # Description: plugin for iptables
 # Dependencies: iptables, arptables (optional)
 
-OPT="$1"
-
-OLD_IS="$IFS"
-IFS=' 	
-'
+local OPT="$1"
 
 FLUSH()
 {
-	TYPE="$1"
+	local TYPE="$1"
 	for type in $TYPE; do
 
 		if [[ $type == "DEFAULT" ]]; then
@@ -61,7 +57,7 @@ FLUSH()
 
 PREROUTING_SECURTIY()
 {
-	WAN=$1
+	local WAN="$1"
 
 	# https://javapipe.com/iptables-ddos-protection
 	### 1: Drop invalid packets ###
@@ -91,15 +87,15 @@ PREROUTING_SECURTIY()
 
 	### 5: Block spoofed packets ###
 	if [[ ! -z $WAN ]]; then
-		iptables -t mangle -A PREROUTING -i ${WAN} -s 224.0.0.0/3 -j DROP
-		iptables -t mangle -A PREROUTING -i ${WAN} -s 169.254.0.0/16 -j DROP
-		iptables -t mangle -A PREROUTING -i ${WAN} -s 172.16.0.0/12 -j DROP
-		iptables -t mangle -A PREROUTING -i ${WAN} -s 192.0.2.0/24 -j DROP
-		iptables -t mangle -A PREROUTING -i ${WAN} -s 192.168.0.0/16 -j DROP
-		iptables -t mangle -A PREROUTING -i ${WAN} -s 10.0.0.0/8 -j DROP
-		iptables -t mangle -A PREROUTING -i ${WAN} -s 0.0.0.0/8 -j DROP
-		iptables -t mangle -A PREROUTING -i ${WAN} -s 240.0.0.0/5 -j DROP
-		iptables -t mangle -A PREROUTING -i ${WAN} -s 127.0.0.0/8 -j DROP
+		iptables -t mangle -A PREROUTING -i $WAN -s 224.0.0.0/3 -j DROP
+		iptables -t mangle -A PREROUTING -i $WAN -s 169.254.0.0/16 -j DROP
+		iptables -t mangle -A PREROUTING -i $WAN -s 172.16.0.0/12 -j DROP
+		iptables -t mangle -A PREROUTING -i $WAN -s 192.0.2.0/24 -j DROP
+		iptables -t mangle -A PREROUTING -i $WAN -s 192.168.0.0/16 -j DROP
+		iptables -t mangle -A PREROUTING -i $WAN -s 10.0.0.0/8 -j DROP
+		iptables -t mangle -A PREROUTING -i $WAN -s 0.0.0.0/8 -j DROP
+		iptables -t mangle -A PREROUTING -i $WAN -s 240.0.0.0/5 -j DROP
+		iptables -t mangle -A PREROUTING -i $WAN -s 127.0.0.0/8 -j DROP
 	fi
 	### 6: Drop ICMP (you usually don't need this protocol) ###
 	iptables -t mangle -A PREROUTING -p icmp -j DROP
@@ -130,14 +126,14 @@ PREROUTING_SECURTIY()
 		iptables -A port-scanning -j DROP
 	fi
 
-	iptables -A OUTPUT -m tcp -p tcp --tcp-flags ACK -j ACCEPT
+	#iptables -A OUTPUT -m tcp -p tcp --tcp-flags ALL ACK -j ACCEPT
 }
 
 
 PORT_KNOCKING()
 {
-	COMBO="$1"
-	DST_PORT=$2
+	local COMBO="$1"
+	local DST_PORT=$2
 
 	if [[ ! $(iptables -nL "KNOCKING_${DST_PORT}" 2>/dev/null) ]]; then
 		iptables -N "KNOCKING_${DST_PORT}"
@@ -160,30 +156,32 @@ DEFAULT_LO()
 # This allows connections to servers from any interface
 INPUT()
 {
-	IFACE="$1"
-	IP="$2"
-	PORT="$3"
-	PROTOCOL="$4"
+	local IFACE="$1"
+	local IP="$2"
+	local PORT="$3"
+	local PROTOCOL="$4"
+	local IFS=' 	
+'
 
-	if [ ! -z $5 ]; then
-		MAC="-m mac --mac-source $5"
+	if [ ! -z "$5" ]; then
+		local MAC="-m mac --mac-source $5"
 	fi
 
 	for interface in $IFACE; do
 		# interface to ip 'tagging', useful for vlans and/or multiple interfaces
 		if [[ $IP == *':'* ]]; then
-			INPUT_IFACE=$(echo $IP | cut -d ":" -f1)
-			INPUT_IP=$(echo $IP | cut -d ":" -f2)
+			local INPUT_IFACE=$(echo $IP | cut -d ":" -f1)
+			local INPUT_IP=$(echo $IP | cut -d ":" -f2)
 		else
-			INPUT_IFACE=$interface
-			INPUT_IP=$IP
+			local INPUT_IFACE=$interface
+			local INPUT_IP=$IP
 		fi
 
 		if [[ $interface =~ [0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3} ]]; then
-			IFACE_IP=$interface
-			interface=$INPUT_IFACE
+			local IFACE_IP=$interface
+			local interface=$INPUT_IFACE
 		else
-			IFACE_IP="$(ip address show $interface | grep -oP '(?<=inet ).*(?=/)')"
+			local IFACE_IP="$(ip address show $interface | grep -oP '(?<=inet ).*(?=/)')"
 		fi
 
 		if [[ $INPUT_IFACE == $interface ]]; then
@@ -197,31 +195,33 @@ INPUT()
 # This allows the router to connect to other servers from any interface
 OUTPUT()
 {
-	IFACE="$1"
-	IP="$2"
-	PORT="$3"
-	PROTOCOL="$4"
+	local IFACE="$1"
+	local IP="$2"
+	local PORT="$3"
+	local PROTOCOL="$4"
+	local IFS=' 	
+'
 
 	if [ ! -z $5 ]; then
-		MAC="-m mac --mac-source $5"
+		local MAC="-m mac --mac-source $5"
 	fi
 
 	for interface in $IFACE; do
 		# interface to ip 'tagging', useful for vlans and/or multiple interfaces
 		if [[ $IP == *':'* ]]; then
-			OUTPUT_IFACE=$(echo $IP | cut -d ":" -f1)
-			OUTPUT_IP=$(echo $IP | cut -d ":" -f2)
+			local OUTPUT_IFACE=$(echo $IP | cut -d ":" -f1)
+			local OUTPUT_IP=$(echo $IP | cut -d ":" -f2)
 		else
-			OUTPUT_IFACE=$interface
-			OUTPUT_IP=$IP
+			local OUTPUT_IFACE=$interface
+			local OUTPUT_IP=$IP
 		fi
 
 
 		if [[ $interface =~ [0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3} ]]; then
-			IFACE_IP=$interface
-			interface=$OUTPUT_IFACE
+			local IFACE_IP=$interface
+			local interface=$OUTPUT_IFACE
 		else
-			IFACE_IP="$(ip address show $interface | grep -oP '(?<=inet ).*(?=/)')"
+			local IFACE_IP="$(ip address show $interface | grep -oP '(?<=inet ).*(?=/)')"
 		fi
 
 
@@ -237,21 +237,22 @@ OUTPUT()
 # This allows lan clients to use the internet
 FORWARD_NAT()
 {
-	SRC_IFACE="$1"
-	SRC_IP="$2"
-	DST_IFACE="$3"
-	DST_IP="$4"
-	DST_PORT="$5"
-	PROTOCOL="$6"
-
+	local SRC_IFACE="$1"
+	local SRC_IP="$2"
+	local DST_IFACE="$3"
+	local DST_IP="$4"
+	local DST_PORT="$5"
+	local PROTOCOL="$6"
+	local IFS=' 	
+'
 	for interface in $SRC_IFACE; do
 		# interface to ip 'tagging', useful for vlans and/or multiple interfaces
 		if [[ $SRC_IP == *':'* ]]; then
-			SRC_IFACE_1=$(echo $SRC_IP | cut -d ":" -f1)
-			SRC_IP_1=$(echo $SRC_IP | cut -d ":" -f2)
+			local SRC_IFACE_1=$(echo $SRC_IP | cut -d ":" -f1)
+			local SRC_IP_1=$(echo $SRC_IP | cut -d ":" -f2)
 		else
-			SRC_IFACE_1=$interface
-			SRC_IP_1=$SRC_IP
+			local SRC_IFACE_1=$interface
+			local SRC_IP_1=$SRC_IP
 		fi
 
 		if [[ $SRC_IFACE_1 == $interface ]]; then
@@ -265,40 +266,41 @@ FORWARD_NAT()
 # This allows which user and group can connect to what service
 ACL_SERVICES()
 {
-	IFACE=$1
-	IP=$2
-	PORT=$3
-	USER_GROUP="$4"
-	PROTOCOL="$5"
-
+	local IFACE="$1"
+	local IP="$2"
+	local PORT="$3"
+	local USER_GROUP="$4"
+	local PROTOCOL="$5"
+	local IFS=' 	
+'
 	for interface in $IFACE; do
 		# interface to ip 'tagging', useful for vlans and/or multiple interfaces
 		if [[ $IP == *':'* ]]; then
-			ACL_IFACE=$(echo $IP | cut -d ':' -f1)
-			ACL_IP=$(echo $IP | cut -d ':' -f2)
+			local ACL_IFACE=$(echo $IP | cut -d ':' -f1)
+			local ACL_IP=$(echo $IP | cut -d ':' -f2)
 		else
-			ACL_IFACE=$interface
-			ACL_IP=$IP
+			local ACL_IFACE=$interface
+			local ACL_IP=$IP
 		fi
 
 		if [[ $ACL_IFACE == $interface ]]; then
 
 			if [[ $interface == *':'* ]]; then
-				interface=$(echo "$interface" | cut -d ':' -f1)
-				IFACE_IP=$(echo "$ACL_IFACE" | cut -d ':' -f2)
+				local interface=$(echo "$interface" | cut -d ':' -f1)
+				local IFACE_IP=$(echo "$ACL_IFACE" | cut -d ':' -f2)
 			else
-				IFACE_IP="$(ip address show $interface | grep -oP '(?<=inet ).*(?=/)')"
+				local IFACE_IP="$(ip address show $interface | grep -oP '(?<=inet ).*(?=/)' | cut -d " " -f1)"
 			fi
 
-			USER=$(echo $USER_GROUP  | cut -zd ':' -f1 | sed 's/\x0//g')
-			GROUP=$(echo $USER_GROUP | cut -zd ':' -f2 | sed 's/\x0//g')
+			local USER=$(echo $USER_GROUP  | cut -zd ':' -f1 | sed 's/\x0//g')
+			local GROUP=$(echo $USER_GROUP | cut -zd ':' -f2 | sed 's/\x0//g')
 
 			if [ ! -z $USER ]; then
-				USER="-m owner --uid-owner $USER"
+				local USER="-m owner --uid-owner $USER"
 			fi
 
 			if [ ! -z $GROUP ]; then
-				GROUP="-m owner --gid-owner $GROUP"
+				local GROUP="-m owner --gid-owner $GROUP"
 			fi
 
 			iptables -A OUTPUT -o $interface -p $PROTOCOL --dport $PORT -s $IFACE_IP -d $ACL_IP $USER $GROUP -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
@@ -317,20 +319,20 @@ ACL_SERVICES()
 # For the time being, we need a special function for ACL'ing loopback
 ACL_LO_CLIENT()
 {
-	IP="$1"
-	PORT="$2"
-	USER_GROUP="$3"
-	PROTOCOL="$4"
+	local IP="$1"
+	local PORT="$2"
+	local USER_GROUP="$3"
+	local PROTOCOL="$4"
 
-	USER=$(echo $USER_GROUP  | cut -zd ':' -f1 | sed 's/\x0//g')
-	GROUP=$(echo $USER_GROUP | cut -zd ':' -f2 | sed 's/\x0//g')
+	local USER=$(echo $USER_GROUP  | cut -zd ':' -f1 | sed 's/\x0//g')
+	local GROUP=$(echo $USER_GROUP | cut -zd ':' -f2 | sed 's/\x0//g')
 
 	if [ ! -z $USER ]; then
-		USER="-m owner --uid-owner $USER"
+		local USER="-m owner --uid-owner $USER"
 	fi
 
-	if [ ! -z $GROU} ]; then
-		GROUP="-m owner --gid-owner $GROUP"
+	if [ ! -z $GROUP ]; then
+		local GROUP="-m owner --gid-owner $GROUP"
 	fi
 
 	iptables -A OUTPUT -o lo -p $PROTOCOL -s $IP -d $IP --dport $PORT $USER $GROUP -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
@@ -341,20 +343,20 @@ ACL_LO_CLIENT()
 ACL_LO_SERVER()
 {
 
-	IP="$1"
-	PORT="$2"
-	USER_GROUP="$3"
-	PROTOCOL="$4"
+	local IP="$1"
+	local PORT="$2"
+	local USER_GROUP="$3"
+	local PROTOCOL="$4"
 
-	USER=$(echo $USER_GROUP  | cut -zd ':' -f1 | sed 's/\x0//g')
-	GROUP=$(echo $USER_GROUP | cut -zd ':' -f2 | sed 's/\x0//g')
+	local USER=$(echo $USER_GROUP  | cut -zd ':' -f1 | sed 's/\x0//g')
+	local GROUP=$(echo $USER_GROUP | cut -zd ':' -f2 | sed 's/\x0//g')
 
 	if [ ! -z $USER ]; then
-		USER="-m owner --uid-owner $USER"
+		local USER="-m owner --uid-owner $USER"
 	fi
 
 	if [ ! -z $GROUP ]; then
-		GROUP="-m owner --gid-owner $GROUP"
+		local GROUP="-m owner --gid-owner $GROUP"
 	fi
 
 	iptables -A INPUT -i lo -p $PROTOCOL -d $IP -s $IP --dport $PORT -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
