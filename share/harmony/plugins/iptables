@@ -4,7 +4,7 @@
 
 local OPT="$1"
 
-FLUSH()
+flush()
 {
 	local TYPE="$1"
 	for type in $TYPE; do
@@ -51,13 +51,13 @@ FLUSH()
 	iptables -P OUTPUT DROP
 	iptables -P FORWARD DROP
 
-	#iptables -A OUTPUT -j OUT_DNSCRYPT_ACL
-	#iptables -A INPUT -j IN_DNSCRYPT_ACL
+	#iptables -A OUTPUT -j OUT_DNSCRYPT_acl
+	#iptables -A INPUT -j IN_DNSCRYPT_acl
 }
 
-PREROUTING_SECURTIY()
+prerouting_security()
 {
-	local WAN="$1"
+	local wan="$1"
 
 	# https://javapipe.com/iptables-ddos-protection
 	### 1: Drop invalid packets ###
@@ -86,16 +86,16 @@ PREROUTING_SECURTIY()
 	iptables -t mangle -A PREROUTING -p tcp --tcp-flags ALL SYN,RST,ACK,FIN,URG -j DROP
 
 	### 5: Block spoofed packets ###
-	if [[ ! -z $WAN ]]; then
-		iptables -t mangle -A PREROUTING -i $WAN -s 224.0.0.0/3 -j DROP
-		iptables -t mangle -A PREROUTING -i $WAN -s 169.254.0.0/16 -j DROP
-		iptables -t mangle -A PREROUTING -i $WAN -s 172.16.0.0/12 -j DROP
-		iptables -t mangle -A PREROUTING -i $WAN -s 192.0.2.0/24 -j DROP
-		iptables -t mangle -A PREROUTING -i $WAN -s 192.168.0.0/16 -j DROP
-		iptables -t mangle -A PREROUTING -i $WAN -s 10.0.0.0/8 -j DROP
-		iptables -t mangle -A PREROUTING -i $WAN -s 0.0.0.0/8 -j DROP
-		iptables -t mangle -A PREROUTING -i $WAN -s 240.0.0.0/5 -j DROP
-		iptables -t mangle -A PREROUTING -i $WAN -s 127.0.0.0/8 -j DROP
+	if [[ ! -z $wan ]]; then
+		iptables -t mangle -A PREROUTING -i $wan -s 224.0.0.0/3 -j DROP
+		iptables -t mangle -A PREROUTING -i $wan -s 169.254.0.0/16 -j DROP
+		iptables -t mangle -A PREROUTING -i $wan -s 172.16.0.0/12 -j DROP
+		iptables -t mangle -A PREROUTING -i $wan -s 192.0.2.0/24 -j DROP
+		iptables -t mangle -A PREROUTING -i $wan -s 192.168.0.0/16 -j DROP
+		iptables -t mangle -A PREROUTING -i $wan -s 10.0.0.0/8 -j DROP
+		iptables -t mangle -A PREROUTING -i $wan -s 0.0.0.0/8 -j DROP
+		iptables -t mangle -A PREROUTING -i $wan -s 240.0.0.0/5 -j DROP
+		iptables -t mangle -A PREROUTING -i $wan -s 127.0.0.0/8 -j DROP
 	fi
 	### 6: Drop ICMP (you usually don't need this protocol) ###
 	iptables -t mangle -A PREROUTING -p icmp -j DROP
@@ -103,14 +103,14 @@ PREROUTING_SECURTIY()
 	### 7: Drop fragments in all chains ###
 	iptables -t mangle -A PREROUTING -f -j DROP
 
-	### 8: Limit connections per source IP ###
+	### 8: Limit connections per source ip ###
 	iptables -A INPUT -p tcp -m connlimit --connlimit-above 111 -j REJECT --reject-with tcp-reset
 
 	### 9: Limit RST packets ###
 	iptables -A INPUT -p tcp --tcp-flags RST RST -m limit --limit 2/s --limit-burst 2 -j ACCEPT
 	iptables -A INPUT -p tcp --tcp-flags RST RST -j DROP
 
-	### 10: Limit new TCP connections per second per source IP ###
+	### 10: Limit new TCP connections per second per source ip ###
 	iptables -A INPUT -p tcp -m conntrack --ctstate NEW -m limit --limit 60/s --limit-burst 20 -j ACCEPT
 	iptables -A INPUT -p tcp -m conntrack --ctstate NEW -j DROP
 
@@ -130,243 +130,244 @@ PREROUTING_SECURTIY()
 }
 
 
-PORT_KNOCKING()
+port_knocking()
 {
 	local COMBO="$1"
-	local DST_PORT=$2
+	local dst_port=$2
 
-	if [[ ! $(iptables -nL "KNOCKING_${DST_PORT}" 2>/dev/null) ]]; then
-		iptables -N "KNOCKING_${DST_PORT}"
+	if [[ ! $(iptables -nL "KNOCKING_${dst_port}" 2>/dev/null) ]]; then
+		iptables -N "KNOCKING_${dst_port}"
 	fi
 }
 
 # Use only if diagnosing connection issues on the loopback interface!
-DEFAULT_LO()
+default_lo()
 {
 	iptables -A INPUT  -i lo -s 127.0.0.1/8 -d 127.0.0.1/8 -j ACCEPT
 	iptables -A OUTPUT -o lo -d 127.0.0.1/8 -s 127.0.0.1/8 -j ACCEPT
 }
 
-#ACL_DNS()
+#acl_DNS()
 #{
 #	if [ ! -d $(dirname "$DNS_FILE") ]; then
 #		mkdir -p $(dirname "$DNS_FILE"
 #}
 
 # This allows connections to servers from any interface
-INPUT()
+input()
 {
-	local IFACE="$1"
-	local IP="$2"
-	local PORT="$3"
-	local PROTOCOL="$4"
+	local iface="$1"
+	local ip="$2"
+	local port="$3"
+	local protocol="$4"
 	local IFS=' 	
 '
 
 	if [ ! -z "$5" ]; then
-		local MAC="-m mac --mac-source $5"
+		local mac="-m mac --mac-source $5"
 	fi
 
-	for interface in $IFACE; do
+	for interface in $iface; do
 		# interface to ip 'tagging', useful for vlans and/or multiple interfaces
-		if [[ $IP == *':'* ]]; then
-			local INPUT_IFACE=$(echo $IP | cut -d ":" -f1)
-			local INPUT_IP=$(echo $IP | cut -d ":" -f2)
+		if [[ $ip == *':'* ]]; then
+			local input_iface="${ip%%:*}"
+			local input_ip="${ip#*:}"
 		else
-			local INPUT_IFACE=$interface
-			local INPUT_IP=$IP
+			local input_iface="$interface"
+			local input_ip="$ip"
 		fi
 
 		if [[ $interface =~ [0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3} ]]; then
-			local IFACE_IP=$interface
-			local interface=$INPUT_IFACE
+			local iface_ip="$interface"
+			local interface="$input_iface"
 		else
-			local IFACE_IP="$(ip address show $interface | grep -oP '(?<=inet ).*(?=/)')"
+			local iface_ip="$(ip address show $interface | grep -oP '(?<=inet ).*(?=/)' | cut -d " " -f1)"
 		fi
 
-		if [[ $INPUT_IFACE == $interface ]]; then
+		if [[ $input_iface == $interface ]]; then
 
-			iptables -A INPUT -i $interface -p $PROTOCOL --dport $PORT -s $INPUT_IP -d $IFACE_IP $MAC -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
-			iptables -A OUTPUT -o $interface -p $PROTOCOL --sport $PORT -d $INPUT_IP -s $IFACE_IP -m state --state ESTABLISHED,RELATED -j ACCEPT
+			iptables -A INPUT  -i $interface -p $protocol --dport $port -s $input_ip -d $iface_ip $mac -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
+			iptables -A OUTPUT -o $interface -p $protocol --sport $port -d $input_ip -s $iface_ip -m state --state ESTABLISHED,RELATED -j ACCEPT
 		fi
 	done
 }
 
 # This allows the router to connect to other servers from any interface
-OUTPUT()
+output()
 {
-	local IFACE="$1"
-	local IP="$2"
-	local PORT="$3"
-	local PROTOCOL="$4"
+	local iface="$1"
+	local ip="$2"
+	local port="$3"
+	local protocol="$4"
 	local IFS=' 	
 '
 
 	if [ ! -z $5 ]; then
-		local MAC="-m mac --mac-source $5"
+		local mac="-m mac --mac-source $5"
 	fi
 
-	for interface in $IFACE; do
+	for interface in $iface; do
 		# interface to ip 'tagging', useful for vlans and/or multiple interfaces
-		if [[ $IP == *':'* ]]; then
-			local OUTPUT_IFACE=$(echo $IP | cut -d ":" -f1)
-			local OUTPUT_IP=$(echo $IP | cut -d ":" -f2)
+		if [[ $ip == *':'* ]]; then
+			local output_iface="${ip%%:*}"
+			local output_ip="${ip#*:}"
 		else
-			local OUTPUT_IFACE=$interface
-			local OUTPUT_IP=$IP
+			local output_iface="$interface"
+			local output_ip="$ip"
 		fi
 
 
 		if [[ $interface =~ [0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3} ]]; then
-			local IFACE_IP=$interface
-			local interface=$OUTPUT_IFACE
+			local iface_ip=$interface
+			local interface=$output_iface
 		else
-			local IFACE_IP="$(ip address show $interface | grep -oP '(?<=inet ).*(?=/)')"
+			local iface_ip="$(ip address show $interface | grep -oP '(?<=inet ).*(?=/)' | cut -d " " -f1)"
 		fi
 
 
-		if [[ $OUTPUT_IFACE == $interface ]]; then
+		if [[ $output_iface == $interface ]]; then
 
-			iptables -A INPUT -i $interface -p $PROTOCOL --sport $PORT -s $OUTPUT_IP -d $IFACE_IP $MAC -m state --state ESTABLISHED,RELATED -j ACCEPT
-			iptables -A OUTPUT -o $interface -p $PROTOCOL --dport $PORT -d $OUTPUT_IP -s $IFACE_IP -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
+			iptables -A INPUT  -i $interface -p $protocol --sport $port -s $output_ip -d $iface_ip $mac -m state --state ESTABLISHED,RELATED -j ACCEPT
+			iptables -A OUTPUT -o $interface -p $protocol --dport $port -d $output_ip -s $iface_ip -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
 
 		fi
 	done
 }
 
 # This allows lan clients to use the internet
-FORWARD_NAT()
+forward()
 {
-	local SRC_IFACE="$1"
-	local SRC_IP="$2"
-	local DST_IFACE="$3"
-	local DST_IP="$4"
-	local DST_PORT="$5"
-	local PROTOCOL="$6"
+	local src_iface="$1"
+	local src_ip="$2"
+	local dst_iface="$3"
+	local dst_ip="$4"
+	local dst_port="$5"
+	local protocol="$6"
 	local IFS=' 	
 '
-	for interface in $SRC_IFACE; do
+	for interface in $src_iface; do
 		# interface to ip 'tagging', useful for vlans and/or multiple interfaces
-		if [[ $SRC_IP == *':'* ]]; then
-			local SRC_IFACE_1=$(echo $SRC_IP | cut -d ":" -f1)
-			local SRC_IP_1=$(echo $SRC_IP | cut -d ":" -f2)
+		if [[ $src_ip == *':'* ]]; then
+			local src_iface_1="${ip%%:*}"
+			local src_ip_1="${ip#*:}"
 		else
-			local SRC_IFACE_1=$interface
-			local SRC_IP_1=$SRC_IP
+			local src_iface_1="$interface"
+			local src_ip_1="$src_ip"
 		fi
 
-		if [[ $SRC_IFACE_1 == $interface ]]; then
-			iptables -A FORWARD -i $interface -p $PROTOCOL --dport $DST_PORT -s $SRC_IP_1 -d $DST_IP -j ACCEPT
-			iptables -A FORWARD -i $DST_IFACE -p $PROTOCOL --sport $DST_PORT -d $SRC_IP_1 -s $DST_IP -j ACCEPT
-			iptables -t nat -A POSTROUTING -o $DST_IFACE -j MASQUERADE
+		if [[ $src_iface_1 == $interface ]]; then
+			iptables -A FORWARD -i $interface -p $protocol --dport $dst_port -s $src_ip_1 -d $dst_ip -j ACCEPT
+			iptables -A FORWARD -i $dst_iface -p $protocol --sport $dst_port -d $src_ip_1 -s $dst_ip -j ACCEPT
+			iptables -t nat -A POSTROUTING -o $dst_iface -j MASQUERADE
 		fi
 	done
 }
 
 # This allows which user and group can connect to what service
-ACL_SERVICES()
+acl()
 {
-	local IFACE="$1"
-	local IP="$2"
-	local PORT="$3"
-	local USER_GROUP="$4"
-	local PROTOCOL="$5"
+	local iface="$1"
+	local ip="$2"
+	local port="$3"
+	local user_group="$4"
+	local protocol="$5"
 	local IFS=' 	
 '
-	for interface in $IFACE; do
+	for interface in $iface; do
 		# interface to ip 'tagging', useful for vlans and/or multiple interfaces
-		if [[ $IP == *':'* ]]; then
-			local ACL_IFACE=$(echo $IP | cut -d ':' -f1)
-			local ACL_IP=$(echo $IP | cut -d ':' -f2)
+		if [[ $ip == *':'* ]]; then
+			local acl_iface="${ip%%:*}"
+			local acl_ip="${ip#*:}"
 		else
-			local ACL_IFACE=$interface
-			local ACL_IP=$IP
+			local acl_iface="$interface"
+			local acl_ip="$ip"
 		fi
 
-		if [[ $ACL_IFACE == $interface ]]; then
+		if [[ $acl_iface == $interface ]]; then
 
 			if [[ $interface == *':'* ]]; then
-				local interface=$(echo "$interface" | cut -d ':' -f1)
-				local IFACE_IP=$(echo "$ACL_IFACE" | cut -d ':' -f2)
+				local interface="${interface%%:*}"
+				local iface_ip="${acl_iface#*:}"
 			else
-				local IFACE_IP="$(ip address show $interface | grep -oP '(?<=inet ).*(?=/)' | cut -d " " -f1)"
+				local iface_ip="$(ip address show $interface | grep -oP '(?<=inet ).*(?=/)' | cut -d " " -f1)"
 			fi
 
-			local USER=$(echo $USER_GROUP  | cut -zd ':' -f1 | sed 's/\x0//g')
-			local GROUP=$(echo $USER_GROUP | cut -zd ':' -f2 | sed 's/\x0//g')
+			# sed 's/\x0//g'
+			local user="${user_group%%:*}"
+			local group="${user_group#*:}"
 
-			if [ ! -z $USER ]; then
-				local USER="-m owner --uid-owner $USER"
+			if [ ! -z $user ]; then
+				local user="-m owner --uid-owner $user"
 			fi
 
-			if [ ! -z $GROUP ]; then
-				local GROUP="-m owner --gid-owner $GROUP"
+			if [ ! -z $group ]; then
+				local group="-m owner --gid-owner $group"
 			fi
 
-			iptables -A OUTPUT -o $interface -p $PROTOCOL --dport $PORT -s $IFACE_IP -d $ACL_IP $USER $GROUP -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
-			iptables -A INPUT -i $interface -p $PROTOCOL --sport $PORT -d $IFACE_IP -s $ACL_IP -m state --state ESTABLISHED,RELATED -j ACCEPT
+			iptables -A OUTPUT -o $interface -p $protocol --dport $port -s $iface_ip -d $acl_ip $user $group -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
+			iptables -A INPUT  -i $interface -p $protocol --sport $port -d $iface_ip -s $acl_ip -m state --state ESTABLISHED,RELATED -j ACCEPT
 		fi
 	done
 }
 
 ### LO NOTES
-### First a connection leaves // client:**** -> server:80			ACL_LO_CLIENT()
-### Then a connection is received // server:80 <- client:****			ACL_LO_SERVER()
-### Next server tries to connect back // server:80 -> client:****		ACL_LO_SERVER()
-### Finally client establishes the connection // client:**** <- server:80	ACL_LO_CLIENT()
+### First a connection leaves // client:**** -> server:80			acl_LO_CLIENT()
+### Then a connection is received // server:80 <- client:****			acl_LO_SERVER()
+### Next server tries to connect back // server:80 -> client:****		acl_LO_SERVER()
+### Finally client establishes the connection // client:**** <- server:80	acl_LO_CLIENT()
 
 
-# For the time being, we need a special function for ACL'ing loopback
-ACL_LO_CLIENT()
+# For the time being, we need a special function for acl'ing loopback
+acl_lo_client()
 {
-	local IP="$1"
-	local PORT="$2"
-	local USER_GROUP="$3"
-	local PROTOCOL="$4"
+	local ip="$1"
+	local port="$2"
+	local user_group="$3"
+	local protocol="$4"
 
-	local USER=$(echo $USER_GROUP  | cut -zd ':' -f1 | sed 's/\x0//g')
-	local GROUP=$(echo $USER_GROUP | cut -zd ':' -f2 | sed 's/\x0//g')
+	local user="${user_group%%:*}"
+	local group="${user_group#*:}"
 
-	if [ ! -z $USER ]; then
-		local USER="-m owner --uid-owner $USER"
+	if [ ! -z $user ]; then
+		local user="-m owner --uid-owner $user"
 	fi
 
-	if [ ! -z $GROUP ]; then
-		local GROUP="-m owner --gid-owner $GROUP"
+	if [ ! -z $group ]; then
+		local group="-m owner --gid-owner $group"
 	fi
 
-	iptables -A OUTPUT -o lo -p $PROTOCOL -s $IP -d $IP --dport $PORT $USER $GROUP -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
-	iptables -A INPUT -i lo -p $PROTOCOL -d $IP -s $IP --sport $PORT -m state --state ESTABLISHED,RELATED -j ACCEPT
+	iptables -A OUTPUT -o lo -p $protocol -s $ip -d $ip --dport $port $user $group -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
+	iptables -A INPUT  -i lo -p $protocol -d $ip -s $ip --sport $port -m state --state ESTABLISHED,RELATED -j ACCEPT
 }
 
 # A server function to prevent reduntant rules
-ACL_LO_SERVER()
+acl_lo_server()
 {
 
-	local IP="$1"
-	local PORT="$2"
-	local USER_GROUP="$3"
-	local PROTOCOL="$4"
+	local ip="$1"
+	local port="$2"
+	local user_group="$3"
+	local protocol="$4"
 
-	local USER=$(echo $USER_GROUP  | cut -zd ':' -f1 | sed 's/\x0//g')
-	local GROUP=$(echo $USER_GROUP | cut -zd ':' -f2 | sed 's/\x0//g')
+	local user="${user_group%%:*}"
+	local group="${user_group#*:}"
 
-	if [ ! -z $USER ]; then
-		local USER="-m owner --uid-owner $USER"
+	if [ ! -z $user ]; then
+		local user="-m owner --uid-owner $user"
 	fi
 
-	if [ ! -z $GROUP ]; then
-		local GROUP="-m owner --gid-owner $GROUP"
+	if [ ! -z $group ]; then
+		local group="-m owner --gid-owner $group"
 	fi
 
-	iptables -A INPUT -i lo -p $PROTOCOL -d $IP -s $IP --dport $PORT -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
-	iptables -A OUTPUT -o lo -p $PROTOCOL -s $IP -d $IP --sport $PORT $USER $GROUP -m state --state ESTABLISHED,RELATED -j ACCEPT
+	iptables -A INPUT  -i lo -p $protocol -d $ip -s $ip --dport $port -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
+	iptables -A OUTPUT -o lo -p $protocol -s $ip -d $ip --sport $port $user $group -m state --state ESTABLISHED,RELATED -j ACCEPT
 }
 
-ACL_LO()
+acl_lo()
 {
-	ACL_LO_CLIENT "$1" "$2" "$3" "$4"
-	ACL_LO_SERVER "$1" "$2" "$3" "$4"
+	acl_lo_client "$1" "$2" "$3" "$4"
+	acl_lo_server "$1" "$2" "$3" "$4"
 }
 
 SAVE()

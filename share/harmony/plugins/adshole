@@ -2,38 +2,37 @@
 # Name: adshole
 # Description: An easy to use script that will download various files to transform
 # into a dnsmasq config file or a hosts file for your OS
-option="${1}"
+option="$1"
 
 alias sed_cmd_1="sed -e 's/\t/ /g' -e 's/#.*$//g' -e '/^$/d' -e 's/||//g' -e 's/\^//g'"
 
 # Only one of these sed commands is used for sed_cmd_2
+# Use 0.0.0.0 because we dont want to overload localhost or
+# interfere with http servers on the host machine
 alias sed_cmd_hosts="sed -e "s/[[:space:]]\+//g" -e 's/^/0.0.0.0 /'"
 alias sed_cmd_dnsmasq="sed -e "s/[[:space:]]\+//g"  -e 's/^/server=\//' -e 's/$/\//'"
 
 # Unfortunately some sites only use zip files, so we must unzip them and use a temp file.
-zip_tran() {
-	host="${1}"
-
-	file=$(echo /tmp/$(basename "${host}"))
-	wget -q "${host}" -O "${file}"
-
-	unzip -p "${file}" | egrep -v "<.*>|127.0.0.1 localhost|=" | sed_cmd_1 |\
+zip_tran()
+{
+	host="$1"
+	file=$(echo /tmp/$(basename "$host"))
+	wget -q "$host" -O "$file"
+	unzip -p "$file" | egrep -v "<.*>|127.0.0.1 localhost|=" | sed_cmd_1 |\
 	cut -d " " -f2- | cut -d " " -f1 | sed_cmd_2 >> "${master}"
-
 	rm "${file}"
 }
 
 # Transform text files
-text_tran() {
+text_tran()
+{
 	# output to stdout, clean whitespaces and garbage, then transform to file format
-	wget -q "${1}" -O - | egrep -v "<.*>|127.0.0.1 localhost|=" | sed_cmd_1 |\
-	# Use 0.0.0.0 because we dont want to overload localhost or
-	# interfere with http servers on the host machine
+	wget -q "$1" -O - | egrep -v "<.*>|127.0.0.1 localhost|=" | sed_cmd_1 |\
 	cut -d " " -f2- | cut -d " " -f1 | sed_cmd_2 >> "${master}"
 }
 
-adshole() {
-
+adshole()
+{
 	which wget 2>&1 > /dev/null && dl_cmd="wget -qO-" || dl_cmd="curl -Ss"
 
 	if [[ $(which wget 2>/dev/null) ]]; then
@@ -43,15 +42,14 @@ adshole() {
 	fi
 
 	if [[ $(id -u) == 0 ]]; then
-		dl_cmd="su nobody -pc '${dl_cmd}'"
+		dl_cmd="su nobody -pc '${dl_cmd}'"q
 	fi
 
-	for url in ${LIST}; do
-		grep -zqiF .zip <(basename "${url}") && zip_tran "${url}" ||\
-		text_tran "${url}"
+	for url in $LIST; do
+		grep -zqiF .zip <(basename "$url") && zip_tran "$url" || text_tran "$url"
 	done
 
-	sort -u "${master}" -o "${master}"
+	sort -u "$master" -o "$master"
 }
 
 usage() {
@@ -71,8 +69,8 @@ OPTION
 	exit 1
 }
 
-[[ "${BASH_SOURCE[0]}" == "${0}" ]] && \
-case ${option} in
+[[ "${BASH_SOURCE[0]}" == "$0" ]] && \
+case $option in
 
 	"-h") usage;;
 
