@@ -168,7 +168,7 @@ input()
 	fi
 
 	for interface in $iface; do
-		# interface to ip 'tagging', useful for vlans and/or multiple interfaces
+		# Allows multiple ifaces to be specified as long as you use the ip like eth0:192.168.1.2
 		if [[ $ip == *':'* ]]; then
 			local input_iface="${ip%%:*}"
 			local input_ip="${ip#*:}"
@@ -186,8 +186,8 @@ input()
 
 		if [[ $input_iface == $interface ]]; then
 
-			iptables -A INPUT  -i $interface -p $protocol --dport $port -s $input_ip -d $iface_ip $mac -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
-			iptables -A OUTPUT -o $interface -p $protocol --sport $port -d $input_ip -s $iface_ip -m state --state ESTABLISHED,RELATED -j ACCEPT
+			_filter_rules+="-A INPUT  -i $interface -p $protocol --dport $port -s $input_ip -d $iface_ip $mac -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT"$'\n'
+			_filter_rules+="-A OUTPUT -o $interface -p $protocol --sport $port -d $input_ip -s $iface_ip -m state --state ESTABLISHED,RELATED -j ACCEPT"$'\n'
 		fi
 	done
 }
@@ -201,13 +201,12 @@ output()
 	local protocol="$4"
 	local IFS=' 	
 '
-
-	if [ ! -z $5 ]; then
+	if [ ! -z "$5" ]; then
 		local mac="-m mac --mac-source $5"
 	fi
 
 	for interface in $iface; do
-		# interface to ip 'tagging', useful for vlans and/or multiple interfaces
+		# Allows multiple ifaces to be specified as long as you use the ip like eth0:192.168.1.2
 		if [[ $ip == *':'* ]]; then
 			local output_iface="${ip%%:*}"
 			local output_ip="${ip#*:}"
@@ -227,8 +226,8 @@ output()
 
 		if [[ $output_iface == $interface ]]; then
 
-			iptables -A INPUT  -i $interface -p $protocol --sport $port -s $output_ip -d $iface_ip $mac -m state --state ESTABLISHED,RELATED -j ACCEPT
-			iptables -A OUTPUT -o $interface -p $protocol --dport $port -d $output_ip -s $iface_ip -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
+			_filter_rules+="-A INPUT  -i $interface -p $protocol --sport $port -s $output_ip -d $iface_ip $mac -m state --state ESTABLISHED,RELATED -j ACCEPT"$'\n'
+			_filter_rules+="-A OUTPUT -o $interface -p $protocol --dport $port -d $output_ip -s $iface_ip -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT"$'\n'
 
 		fi
 	done
@@ -245,8 +244,12 @@ forward()
 	local protocol="$6"
 	local IFS=' 	
 '
+	if [ ! -z "$7" ]; then
+		local mac="-m mac --mac-source $7"
+	fi
+
 	for interface in $src_iface; do
-		# interface to ip 'tagging', useful for vlans and/or multiple interfaces
+		# Allows multiple ifaces to be specified as long as you use the ip like eth0:192.168.1.2
 		if [[ $src_ip == *':'* ]]; then
 			local src_iface_1="${ip%%:*}"
 			local src_ip_1="${ip#*:}"
@@ -256,9 +259,11 @@ forward()
 		fi
 
 		if [[ $src_iface_1 == $interface ]]; then
-			iptables -A FORWARD -i $interface -p $protocol --dport $dst_port -s $src_ip_1 -d $dst_ip -j ACCEPT
-			iptables -A FORWARD -i $dst_iface -p $protocol --sport $dst_port -d $src_ip_1 -s $dst_ip -j ACCEPT
-			iptables -t nat -A POSTROUTING -o $dst_iface -j MASQUERADE
+			_filter_rules+="-A FORWARD -i $src_iface_1 -p $protocol -m $protocol --dport $dst_port -s $src_ip_1 -d $dst_ip $mac -j ACCEPT"$'\n'
+			_filter_rules+="-A FORWARD -i $dst_iface   -p $protocol -m $protocol --sport $dst_port -d $src_ip_1 -s $dst_ip -j ACCEPT"$'\n'
+			#iptables -t nat -A POSTROUTING -o $dst_iface -j MASQUERADE
+			_nat_rules+="-A POSTROUTING -o $dst_iface -p $protocol -m $protocol --dport $dst_port -s $src_ip_1 -d $dst_ip -j MASQUERADE"$'\n'
+			_nat_rules+="-A POSTROUTING -o $dst_iface -p $protocol -m $protocol --sport $dst_port -d $src_ip_1 -s $dst_ip -j MASQUERADE"$'\n'
 		fi
 	done
 }
@@ -267,6 +272,8 @@ forward()
 acl()
 {
 	local iface="$1"
+	#[[ "$2" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}(/([0-9]|[12][0-9]|3[0-2]))?$ ]] && local ip="$2" || local ip="$(getent ahosts $2 | awk '{print $1}' | sort -u | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}')"
+	#[[ "$3" =~ ^[0-9]+(:[0-9]+)?$ ]] && local port="$3" || port="$(getent services $3 | awk '{split($2, a, "/"); print a[1]}')"
 	local ip="$2"
 	local port="$3"
 	local user_group="$4"
@@ -274,7 +281,7 @@ acl()
 	local IFS=' 	
 '
 	for interface in $iface; do
-		# interface to ip 'tagging', useful for vlans and/or multiple interfaces
+		# Allows multiple ifaces to be specified as long as you use the ip like eth0:192.168.1.2
 		if [[ $ip == *':'* ]]; then
 			local acl_iface="${ip%%:*}"
 			local acl_ip="${ip#*:}"
@@ -292,20 +299,22 @@ acl()
 				local iface_ip="$(ip address show $interface | grep -oP '(?<=inet ).*(?=/)' | cut -d " " -f1)"
 			fi
 
-			# sed 's/\x0//g'
 			local user="${user_group%%:*}"
 			local group="${user_group#*:}"
 
+
 			if [ ! -z $user ]; then
-				local user="-m owner --uid-owner $user"
+				user="-m owner --uid-owner $user"
 			fi
 
 			if [ ! -z $group ]; then
-				local group="-m owner --gid-owner $group"
+				group="-m owner --gid-owner $group"
 			fi
 
-			iptables -A OUTPUT -o $interface -p $protocol --dport $port -s $iface_ip -d $acl_ip $user $group -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
-			iptables -A INPUT  -i $interface -p $protocol --sport $port -d $iface_ip -s $acl_ip -m state --state ESTABLISHED,RELATED -j ACCEPT
+			for host in $acl_ip; do
+				_filter_rules+="-A OUTPUT -o $interface -p $protocol -m $protocol --dport $port -s $iface_ip -d $host $user $group -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT"$'\n'
+				_filter_rules+="-A INPUT  -i $interface -p $protocol -m $protocol --sport $port -d $iface_ip -s $host -m state --state ESTABLISHED,RELATED -j ACCEPT"$'\n'
+			done
 		fi
 	done
 }
@@ -315,7 +324,6 @@ acl()
 ### Then a connection is received // server:80 <- client:****			acl_LO_SERVER()
 ### Next server tries to connect back // server:80 -> client:****		acl_LO_SERVER()
 ### Finally client establishes the connection // client:**** <- server:80	acl_LO_CLIENT()
-
 
 # For the time being, we need a special function for acl'ing loopback
 acl_lo_client()
@@ -370,7 +378,31 @@ acl_lo()
 	acl_lo_server "$1" "$2" "$3" "$4"
 }
 
-SAVE()
+apply()
+{
+	local filter="$(iptables-save | awk '/\*filter/{flag=1} /COMMIT/{flag=0} flag')"
+	local mangle="$(iptables-save | awk '/\*mangle/{flag=1} /COMMIT/{flag=0} flag')"
+	local nat="$(iptables-save | awk '/\*nat/{flag=1} /COMMIT/{flag=0} flag')"
+	local raw="$(iptables-save | awk '/\*raw/{flag=1} /COMMIT/{flag=0} flag')"
+
+	iptables-restore << _EOF
+$filter
+$_filter_rules
+COMMIT
+$mangle
+COMMIT
+$nat
+$_nat_rules
+COMMIT
+$raw
+COMMIT
+_EOF
+
+}
+
+
+
+save()
 {
 	# Sysvinit/systemd
 	[[ $(which service 2>/dev/null) ]] && service iptables restart || \
