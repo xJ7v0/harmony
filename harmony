@@ -29,6 +29,9 @@ load_plugin()
 }
 
 case $option in
-	-h|--help) usage;;
 	*.conf) source "$1";;
+	-) tmpfile=$(mktemp); cat > "$tmpfile"; source "$tmpfile"; rm -f "$tmpfile";;
+	-h|--help|*) usage;;
+
 esac
+
