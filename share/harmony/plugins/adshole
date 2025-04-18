@@ -3,10 +3,6 @@
 # Description: An easy to use script that will download various files to transform
 # into a dnsmasq config file or a hosts file for your OS
 
-#which wget 2>&1 > /dev/null && dl_cmd="wget -qO-" || dl_cmd="curl -Ss"
-
-
-
 # Replace all alias usage with functions
 sed_cmd_1() { sed -e 's/\t/ /g' -e 's/#.*$//g' -e '/^$/d' -e 's/||//g' -e 's/\^//g'; }
 
@@ -15,7 +11,6 @@ sed_cmd_1() { sed -e 's/\t/ /g' -e 's/#.*$//g' -e '/^$/d' -e 's/||//g' -e 's/\^/
 # interfere with http servers on the host machine
 sed_cmd_hosts() { sed -e 's/[[:space:]]\+//g' -e 's/^/0.0.0.0 /'; }
 sed_cmd_dnsmasq() { sed -e 's/[[:space:]]\+//g' -e 's/^/server=\//' -e 's/$/\//'; }
-
 
 dlcmd()
 {
@@ -36,7 +31,7 @@ zip_tran()
 	local file=$(echo /tmp/$(basename "$host"))
 	dlcmd "$host" "$file"
 	unzip -p "$file" | egrep -v "<.*>|127.0.0.1 localhost|=" | sed_cmd_1 |\
-	cut -d " " -f2- | cut -d " " -f1 | "$sed_cmd_2" >> "$master"
+	cut -d " " -f2- | cut -d " " -f1 | "$sed_cmd_2" >> "$main"
 	rm "$file"
 }
 
@@ -46,7 +41,7 @@ text_tran()
 	local host="$1"
 	# output to stdout, clean whitespaces and garbage, then transform to file format
 	dlcmd "$host" - | egrep -v "<.*>|127.0.0.1 localhost|=" | sed_cmd_1 |\
-	cut -d " " -f2- | cut -d " " -f1 | "$sed_cmd_2" >> "$master"
+	cut -d " " -f2- | cut -d " " -f1 | "$sed_cmd_2" >> "$main"
 }
 
 download()
@@ -54,41 +49,70 @@ download()
 	for url in "$@"; do
 		grep -zqiF .zip <(basename "$url") && zip_tran "$url" || text_tran "$url"
 	done
-	sort -u "$master" -o "$master"
+	sort -u "$main" -o "$main"
+}
+
+install_adshole()
+{
+	if [[ "$1" == "dnsmasq" ]]; then
+		mv "$main" "/etc/dnsmasq.d/adshole.conf"
+		chown root:root "/etc/dnsmasq.d/adshole.conf"
+		if rc-status >/dev/null 2>&1; then
+			rc-service dnsmasq restart
+		elif systemctl >/dev/null 2>&1; then
+			systemctl restart dnsmasq
+		else
+			echo "Init system not detected, please restart dnsmasq manually"
+		fi
+	else
+		sed -i '/### BEGIN ADSHOLE ###/,/## END ADSHOLE ###/d' /etc/hosts
+		echo '### BEGIN ADSHOLE ###' >> /etc/hosts
+		cat "$main" >> /etc/hosts
+		echo '### END ADSHOLE ###' >> /etc/hosts
+		rm "$main"
+	fi
+}
+
+uninstall_adshole()
+{
+	sed -i '/### BEGIN ADSHOLE ###/,/## END ADSHOLE ###/d' /etc/hosts
 }
 
 adshole()
 {
 	case $1 in
-		dnsmasq) master="/tmp/dnsmasq_adshole.conf"; sed_cmd_2=sed_cmd_dnsmasq;;
-		hosts)   master="/tmp/hosts_adshole"; sed_cmd_2=sed_cmd_hosts;;
+		dnsmasq) main="/tmp/dnsmasq_adshole.conf"; sed_cmd_2=sed_cmd_dnsmasq;;
+		hosts)   main="/tmp/hosts_adshole"; sed_cmd_2=sed_cmd_hosts;;
 		*)       echo "Please choose between 'dnsmasq' or 'hosts'"; return 1;;
 	esac
+	type="$1"
 	shift
 	download $@
+	install_adshole "$type"
+
 }
 
 usage() {
 	local name="${0##*/}"
         echo """
-$name: - Pull in lists from various websites and converts them to dnsmasq format or host file
+$name: - Pull in lists from various websites and converts them to dnsmasq or host file format
 	Usage: $name  OPTION
 
 OPTION
 
 	-h      print this help message
 
-	-m	creates a master list for dnsmasq
+	-m	creates a main list for dnsmasq
 
-	-M	creates a master list for the OS's host file
+	-M	creates a main list for the OS's host file
 """
 	exit 1
 }
 
 [[ "${BASH_SOURCE[0]}" == "$0" ]] && \
 case $1 in
-	"-m")   master="/tmp/dnsmasq_adshole.conf"; shift; sed_cmd_2=sed_cmd_dnsmasq;;
-	"-M")   master="/tmp/hosts_adshole"; shift; sed_cmd_2=sed_cmd_hosts;;
+	"-m")   main="/tmp/dnsmasq_adshole.conf"; shift; sed_cmd_2=sed_cmd_dnsmasq; type="dnsmasq";;
+	"-M")   main="/tmp/hosts_adshole"; shift; sed_cmd_2=sed_cmd_hosts; type="hosts";;
 	"-h"|*) usage;;
-esac && download $@
+esac && download $@ && install_adshole "$type"
 
