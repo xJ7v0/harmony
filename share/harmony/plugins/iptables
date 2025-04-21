@@ -132,12 +132,36 @@ prerouting_security()
 
 port_knocking()
 {
-	local COMBO="$1"
-	local dst_port=$2
+	name="$1"
+	dst_port="$2"
+	shift 2
+	combo=("$@")
 
-	if [[ ! $(iptables -nL "KNOCKING_${dst_port}" 2>/dev/null) ]]; then
-		iptables -N "KNOCKING_${dst_port}"
-	fi
+	chain="KNOCK_${name^^}_$dst_port"
+	array=( )
+
+	iptables -N $chain
+	iptables -A $chain -m state --state NEW -m tcp -p tcp --dport $dst_port -m recent --rcheck --seconds 30 --name ${name^^}${dst_port}_$# -j ACCEPT
+	iptables -A $chain -m state --state NEW -m tcp -p tcp -m recent --name ${name^^}${dst_port}_$# --remove -j DROP
+
+	i=$#
+	while (( i-- > 1 )); do
+		iptables -N ${chain}_INPUT_$i
+		iptables -A $chain -m state --state NEW -m tcp -p tcp --dport "${combo[i]}" -m recent --rcheck --name ${name^^}${dst_port}_$i -j ${chain}_INPUT_$i
+		iptables -A $chain -m state --state NEW -m tcp -p tcp -m recent --name ${name^^}${dst_port}_$i --remove -j DROP
+		array+=($i)
+
+	done
+
+	iptables -A $chain -m state --state NEW -m tcp -p tcp --dport ${combo[0]} -m recent --name ${name^^}${dst_port}_1 --set -j DROP
+	iptables -A $chain -m state --state ESTABLISHED,RELATED -j ACCEPT
+        iptables -A OUTPUT -p tcp --sport $dst_port -m state --state ESTABLISHED,RELATED -j ACCEPT
+
+	for j in "${array[@]}"; do
+		iptables -A ${chain}_INPUT_$j -m recent --name ${name^^}${dst_port}_$((j+1)) --set -j DROP
+	done
+
+	iptables -A INPUT -j $chain
 }
 
 # Use only if diagnosing connection issues on the loopback interface!
