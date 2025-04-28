@@ -2,36 +2,40 @@
 # Description: An easy to use firewall builder for computers using dual nics or just one
 
 prefix="."
-option="$1"
+
+script_dir=$(realpath "$0")
+script_dir="${script_dir%/*}"
+
+name="${0##*/}"
 
 usage()
 {
-	SCRIPT_DIR=$(dirname "$(realpath "$0")")
-	cat  <<EOF
-Usage: $(basename $0)
+	echo "Usage: $name [OPTION] [FILE...]
 iptables wrapper for restrictive setups
-	Usage: $(basename $0)  file...
-	Usage: $(basename $0)  OPTION
+
 OPTION
-	-h	print this help message
+	-h, --help	print this help message
+	-v, --verbose	echo each file name as it is being parsed
 
 PLUGINS
-$(ls "$SCRIPT_DIR/../share/harmony/plugins" | sed 's/^/\t/g')
-
-EOF
+$(ls "$script_dir/../share/harmony/plugins" | sed 's/^/\t/g')
+"
 	exit 1
 }
 
 load_plugin()
 {
-	SCRIPT_DIR=$(dirname "$(realpath "$0")")
-	source "$SCRIPT_DIR/../share/harmony/plugins/$1"
+	source "$script_dir/../share/harmony/plugins/$1"
 }
 
-case $option in
-	*.conf) source "$1";;
-	-) tmpfile=$(mktemp); cat > "$tmpfile"; source "$tmpfile"; rm -f "$tmpfile";;
-	-h|--help|*) usage;;
+[[ $# == 0 ]] && usage
 
-esac
-
+for arg in $@; do
+	case $arg in
+		*.conf) [[ "$v" ]] && echo "$arg"
+			source "$arg";;
+		-) tmpfile=$(mktemp); cat > "$tmpfile"; source "$tmpfile"; rm -f "$tmpfile";;
+		-v|--verbose) v=1; [[ $# == 1 ]] && usage ;;
+		-h|--help|*) usage;;
+	esac
+done
