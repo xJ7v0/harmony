@@ -1,0 +1,23 @@
+#!/bin/bash
+
+
+
+function geo_acl()
+{
+	local zone_dir=$(realpath "$0")
+	zone_dir="${zone_dir%/*}/../share/harmony/zone"
+
+	if ! ipset list geoacl &>/dev/null; then
+		ipset create geoacl hash:net
+	fi
+
+	for zone in $@; do
+		for net in $(cat "$zone_dir/$zone.zone"); do
+			ipset add geoacl $net
+		done
+	done
+
+	iptables -A INPUT  -m set --match-set geoacl src -j DROP
+	iptables -A OUTPUT -m set --match-set geoacl dst -j DROP
+
+}
