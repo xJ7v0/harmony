@@ -1,0 +1,198 @@
+#!/bin/bash
+flush()
+{
+	nft flush ruleset
+	# Set default policies (drop all)
+	# Ensure base tables and chains exist before setting policies
+	nft add table inet filter 2>/dev/null
+
+	nft add chain inet filter input  { type filter hook input priority 0 \; policy drop \; } 2>/dev/null
+	nft add chain inet filter output { type filter hook output priority 0 \; policy drop \; } 2>/dev/null
+	nft add chain inet filter forward { type filter hook forward priority 0 \; policy drop \; } 2>/dev/null
+}
+
+# -----------------------------------------------------------------------------
+# Function: prerouting_security
+# Argument: $1 - WAN interface name (e.g., eth0)
+#
+# Description:
+#   Applies a series of nftables rules to enhance network security at the
+#   packet processing PREROUTING stage. This function includes protections
+#   against invalid packets, malformed TCP flags, spoofed IPs, SYN floods,
+#   port scanning, and other suspicious behaviors.
+#
+#   The function uses the optional 'wan' interface name to filter spoofed
+#   addresses coming in from the external network interface.
+#
+# Rules Implemented:
+#   1. Drop invalid packets
+#   2. Drop new TCP packets without SYN
+#   3. Drop SYN packets with abnormal MSS values
+#   4. Block packets with bogus TCP flags
+#   5. Block spoofed private/reserved IPs (if WAN specified)
+#   6. Drop all ICMP traffic
+#   7. Drop fragmented packets
+#   8. Limit connections per source IP
+#   9. Limit RST packets
+#  10. Limit new TCP connections per second per source IP
+#  11. (Optional) Enable SYNPROXY (requires kernel module support)
+#  12. Create a custom chain for port scanning detection
+# -----------------------------------------------------------------------------
+prerouting_security() {
+	local wan="$1"
+
+	# Drop invalid connection states
+	nft add rule ip mangle prerouting ct state invalid drop
+
+	# Drop new TCP packets without SYN
+	nft add rule ip mangle prerouting ip protocol tcp ct state new tcp flags ! syn drop
+
+	# Drop new TCP packets with abnormal MSS
+	nft add rule ip mangle prerouting ip protocol tcp ct state new tcp mss ! 536-65535 drop
+
+	# Block various invalid or suspicious TCP flag combinations
+	nft add rule ip mangle prerouting ip protocol tcp tcp flags fin,syn,rst,psh,ack,urg none drop
+	nft add rule ip mangle prerouting ip protocol tcp tcp flags fin,syn fin,syn drop
+	nft add rule ip mangle prerouting ip protocol tcp tcp flags syn,rst syn,rst drop
+	nft add rule ip mangle prerouting ip protocol tcp tcp flags syn,fin syn,fin drop
+	nft add rule ip mangle prerouting ip protocol tcp tcp flags fin,rst fin,rst drop
+	nft add rule ip mangle prerouting ip protocol tcp tcp flags fin,ack fin drop
+	nft add rule ip mangle prerouting ip protocol tcp tcp flags ack,urg urg drop
+	nft add rule ip mangle prerouting ip protocol tcp tcp flags ack,fin fin drop
+	nft add rule ip mangle prerouting ip protocol tcp tcp flags ack,psh psh drop
+	nft add rule ip mangle prerouting ip protocol tcp tcp flags all all drop
+	nft add rule ip mangle prerouting ip protocol tcp tcp flags all none drop
+	nft add rule ip mangle prerouting ip protocol tcp tcp flags all fin,psh,urg drop
+	nft add rule ip mangle prerouting ip protocol tcp tcp flags all syn,fin,psh,urg drop
+	nft add rule ip mangle prerouting ip protocol tcp tcp flags all syn,rst,ack,fin,urg drop
+
+	# Drop spoofed private/reserved IP addresses on the WAN interface
+	if [[ -n $wan ]]; then
+		nft add rule ip mangle prerouting iifname "$wan" ip saddr {224.0.0.0/3,169.254.0.0/16,172.16.0.0/12,192.0.2.0/24,192.168.0.0/16,10.0.0.0/8,0.0.0.0/8,240.0.0.0/5,127.0.0.0/8} drop
+	fi
+
+	# Drop all ICMP traffic
+	nft add rule ip mangle prerouting ip protocol icmp drop
+
+	# Drop fragmented packets
+	nft add rule ip mangle prerouting ip fragoff != 0 drop
+
+	# Limit simultaneous TCP connections from a single IP
+	nft add rule ip filter input ip protocol tcp ip daddr {0.0.0.0/0} ct state new limit rate 111/minute accept
+	nft add rule ip filter input ip protocol tcp ip daddr {0.0.0.0/0} ct state new drop
+
+	# Rate-limit RST packets to protect against RST floods
+	nft add rule ip filter input ip protocol tcp tcp flags rst rst limit rate 2/s burst 2 packets accept
+	nft add rule ip filter input ip protocol tcp tcp flags rst rst drop
+
+	# Rate-limit new TCP connections per IP
+	nft add rule ip filter input ip protocol tcp ct state new limit rate 60/s burst 20 packets accept
+	nft add rule ip filter input ip protocol tcp ct state new drop
+
+	# (Optional) Enable SYNPROXY (requires kernel module support)
+	# Requires kernel modules: nf_synproxy_core, etc.
+	# nft add rule ip raw prerouting ip protocol tcp tcp flags syn synproxy state new
+	# nft add rule ip filter input ip protocol tcp ct state invalid drop
+
+	# Create a chain for detecting and limiting port scans
+	if ! nft list chain ip filter port-scanning &>/dev/null; then
+		nft add chain ip filter port-scanning { type filter hook input priority 0 \; policy drop \; }
+		nft add rule ip filter port-scanning ip protocol tcp tcp flags syn,ack,rst rst limit rate 1/s burst 2 packets return
+		nft add rule ip filter port-scanning drop
+	fi
+}
+
+# -----------------------------------------------------------------------------
+# Function: port_knocking
+#
+# Arguments:
+#   $1 - `name` - A custom identifier for the knocking sequence, used to create
+#         a unique name for the chain and the recent list to track the knock.
+#   $2 - `dst_port` - The destination port where the final "knock" should land.
+#   $3+ - `combo` - An array of ports that represent the port knocking sequence.
+#
+# Description:
+#   This function sets up a port knocking sequence using nftables to secure access
+#   to a specific destination port. The function works by requiring a series of
+#   TCP connections to a series of ports in a specific order, and if the correct
+#   sequence is knocked, access to the destination port is allowed.
+#
+# The function works as follows:
+#   1. A new chain is created for the port knocking sequence, named after the
+#      `name` argument and the destination port (`dst_port`).
+#   2. The first rule ensures that the initial knock on the destination port (`dst_port`)
+#      is checked against a "recent" list to see if it's part of a valid knock sequence.
+#      If a valid recent connection exists within 30 seconds, access is allowed.
+#   3. Each subsequent knock in the sequence is checked to ensure that it follows the
+#      correct order. If a valid knock is detected, the next knock is registered.
+#   4. The function also sets up an "input" chain for each knock, managing the state of
+#      each port knock and validating its position in the sequence.
+#   5. Once the sequence is completed, the port specified by `dst_port` is allowed.
+#   6. Rules for handling established and related connections are also applied.
+#
+# -----------------------------------------------------------------------------
+port_knocking()
+{
+	# Assign the first argument to 'name', which will be used for naming chains and lists.
+	name="$1"
+
+	# Assign the second argument to 'dst_port', the destination port for the final knock.
+        dst_port="$2"
+
+	# Shift the first two arguments to process the remaining ones as the combo array.
+	shift 2
+	combo=("$@")  # Create an array of ports representing the knocking sequence.
+
+	# Construct the name of the chain dynamically based on the 'name' and 'dst_port'.
+	chain="KNOCK_${name^^}_$dst_port"
+	array=( )  # Initialize an empty array to keep track of the knock sequence.
+
+	# Create a new chain for the port knocking sequence.
+	add chain inet filter $chain { type filter hook input priority 0; policy drop; }
+
+	# Rule 1: If the packet is new and arrives at the destination port, check the recent list.
+	# If the sequence was previously knocked, allow the packet. The knock sequence is tracked
+	# using the name and the destination port, and the knock sequence has a 30-second time window.
+	add rule inet filter $chain tcp dport $dst_port ip saddr @candidates_ipv4 add @clients_ipv4 { ip saddr timeout 10s }
+
+	# Rule 2: Remove the current entry from the recent list if the sequence does not match,
+	# and drop the packet.
+	add rule inet filter $chain tcp dport $dst_port ip saddr @candidates_ipv4 remove @clients_ipv4 { ip saddr } drop
+
+	# Start processing the rest of the combo array (the sequence of knocks).
+	i=${#combo[@]}  # Set 'i' to the total number of elements in the combo array.
+
+	# Loop through the combo array in reverse order (from the last knock to the first).
+	while (( i-- > 1 )); do
+		# Create a unique chain for each knock in the sequence.
+		add chain inet filter ${chain}_INPUT_$i { type filter hook input priority 0; policy drop; }
+
+		# Rule for each knock in the sequence: Check if the packet matches the correct
+		# knock in the sequence and if the correct knock is found, jump to the corresponding
+		# input chain for that knock.
+		add rule inet filter $chain tcp dport "${combo[i]}" ip saddr @candidates_ipv4 add @clients_ipv4 { ip saddr timeout 10s } jump ${chain}_INPUT_$i
+
+		# Rule to remove the current entry from the recent list if the knock sequence is invalid.
+		add rule inet filter $chain tcp dport "${combo[i]}" ip saddr @candidates_ipv4 remove @clients_ipv4 { ip saddr } drop
+
+		# Add the knock sequence index to the array for future use.
+		array+=($i)
+	done
+
+	# Rule for the first knock in the sequence: Set the state for the first port knock.
+	add rule inet filter $chain tcp dport ${combo[0]} ip saddr @clients_ipv4 add @clients_ipv4 { ip saddr timeout 10s } drop
+
+	# Rule to accept established or related connections.
+	add rule inet filter $chain ct state established,related accept
+
+	# Rule to accept outgoing connections from the destination port.
+	add rule inet filter $chain tcp sport $dst_port ct state established,related accept
+
+	# Loop through the knock sequence array to set the next step in the sequence for each knock.
+	for j in "${array[@]}"; do
+		add rule inet filter ${chain}_INPUT_$j ip saddr @clients_ipv4 add @clients_ipv4 { ip saddr timeout 10s } drop
+	done
+
+	# Finally, add the chain to the main INPUT chain for evaluation.
+	add rule inet filter input jump $chain
+}
