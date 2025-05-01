@@ -1,5 +1,57 @@
 #!/bin/bash
+# -----------------------------------------------------------------------------
+# Plugin: ipset
+#
+# Description:
+#   This plugin provides geographic access control using `ipset` and `iptables`.
+#   It enables blocking of inbound and outbound traffic to and from specific
+#   countries or regions based on IP zone files included in the repository.
+#
+#   Two modes are supported:
+#     - geo_acl:      Uses raw zone files for full CIDR coverage.
+#     - geo_acl_agg:  Uses aggregated zone files to minimize CIDR blocks and
+#                     improve performance.
+#
+# Features:
+#   - Dynamically builds `ipset` sets based on specified zones.
+#   - Applies `iptables` rules to drop traffic matching those sets.
+#   - Includes helper to persist rules using common init systems.
+#
+# Use Cases:
+#   - Block traffic from high-risk geographic regions.
+#   - Enforce region-based network restrictions.
+#   - Strengthen server security posture using IP-based geo-blocking.
+# -----------------------------------------------------------------------------
 
+# -----------------------------------------------------------------------------
+# Function: geo_acl
+# Arguments:
+#   $@ - One or more zone identifiers (e.g., CN, RU, IR)
+#
+# Description:
+#   This function builds a geographic access control list (ACL) using `ipset`
+#   and `iptables` to block both incoming and outgoing traffic to/from specific
+#   countries or regions based on pre-defined IP zone files.
+#
+#   The function reads IP netblocks from zone files located at:
+#     $(prefix)/share/harmony/zone/<zone>.zone
+#   relative to the script’s directory.
+#
+# Behavior:
+#   - Creates an ipset set named 'geoacl' if it doesn't exist.
+#   - Adds all IP subnets listed in the specified zone files to the 'geoacl' set.
+#   - Appends iptables rules to drop incoming and outgoing packets matching 'geoacl'.
+#
+# Requirements:
+#   - `ipset` must be installed and kernel must support it.
+#   - `iptables` must be available and properly configured.
+#   - This script must run with root privileges.
+#
+# Notes:
+#   - Repeated executions without cleanup can cause duplicate iptables rules.
+#   - Intended for basic geo-blocking in hardened network environments.
+#   - Zone files must be in plain text, one CIDR entry per line.
+# -----------------------------------------------------------------------------
 geo_acl()
 {
 	local zone_dir=$(realpath "$0")
@@ -17,10 +69,75 @@ geo_acl()
 
 	iptables -A INPUT  -m set --match-set geoacl src -j DROP
 	iptables -A OUTPUT -m set --match-set geoacl dst -j DROP
-
 }
 
-save()
+# -----------------------------------------------------------------------------
+# Function: geo_acl_agg
+# Arguments:
+#   $@ - One or more aggregated zone identifiers (e.g., CN, RU, IR)
+#
+# Description:
+#   This function builds a geo-based access control list (ACL) using `ipset`
+#   and `iptables`, based on *aggregated* IP zone files. These aggregated files
+#   are optimized to reduce the total number of CIDR blocks by grouping IP
+#   ranges, which improves efficiency and reduces the memory footprint of the
+#   ruleset.
+#
+#   Zone files are expected at:
+#     $(prefix)/share/harmony/aggregated-zone/<zone>.zone
+#   relative to the script’s location.
+#
+# Behavior:
+#   - Creates an `ipset` named 'geoacl' if it doesn't already exist.
+#   - Loads CIDR blocks from each specified aggregated zone file into the set.
+#   - Adds iptables rules to drop incoming and outgoing packets matching any
+#     IP in the `geoacl` set.
+#
+# Requirements:
+#   - Root privileges
+#   - `ipset` and `iptables` must be installed
+#   - Aggregated zone files must exist and contain one CIDR block per line
+#
+# Notes:
+#   - This variant is designed for efficiency by minimizing rule count.
+#   - Avoid running repeatedly without clearing existing iptables rules
+#     to prevent duplication.
+# -----------------------------------------------------------------------------
+geo_acl_agg()
+{
+	local zone_dir=$(realpath "$0")
+	zone_dir="${zone_dir%/*}/../share/harmony/aggregated-zone"
+
+	if ! ipset list geoacl &>/dev/null; then
+		ipset create geoacl hash:net
+	fi
+
+	for zone in $@; do
+		for net in $(cat "$zone_dir/$zone.zone"); do
+			ipset add geoacl $net
+		done
+	done
+
+	iptables -A INPUT  -m set --match-set geoacl src -j DROP
+	iptables -A OUTPUT -m set --match-set geoacl dst -j DROP
+}
+
+# -----------------------------------------------------------------------------
+# Function: save_ipset
+#
+# Description:
+#   Attempts to persist iptables (and by extension, ipset) rules across reboots
+#   by invoking the appropriate service command depending on the init system.
+#
+#   Supports:
+#     - SysVinit and systemd: uses `service iptables save`
+#     - OpenRC: uses `rc-service iptables save`
+#
+# Behavior:
+#   - Detects which service management tool is available (`service` or `rc-service`)
+#   - Executes the appropriate save command for iptables
+# -----------------------------------------------------------------------------
+save_ipset()
 {
 	# Sysvinit/systemd
 	[[ $(which service 2>/dev/null) ]] && service iptables save || \
