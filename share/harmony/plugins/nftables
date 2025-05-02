@@ -196,3 +196,40 @@ port_knocking()
 	# Finally, add the chain to the main INPUT chain for evaluation.
 	add rule inet filter input jump $chain
 }
+
+input() {
+	local iface="$1"
+	local ip="$2"
+	local port="$3"
+	local protocol="$4"
+	local mac="$5"
+	local IFS=' 	
+'
+	if [[ ! -z "$mac" ]]; then
+		local mac_match="ether saddr $mac"
+	fi
+
+	for interface in $iface; do
+		if [[ $ip == *':'* ]]; then
+			local input_iface="${ip%%:*}"
+			local input_ip="${ip#*:}"
+		else
+			local input_iface="$interface"
+			local input_ip="$ip"
+		fi
+
+		if [[ $interface =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+ 			local iface_ip="$interface"
+			interface="$input_iface"
+		else
+			local iface_ip="$(ip -4 addr show "$interface" | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -n 1)"
+		fi
+
+		if [[ $input_iface == "$interface" ]]; then
+			# INPUT rule
+			nft add rule inet filter input ip saddr "$input_ip" ip daddr "$iface_ip" iif "$interface" $protocol dport "$port" $mac_match ct state new,established accept
+			# OUTPUT rule
+			nft add rule inet filter output ip saddr "$iface_ip" ip daddr "$input_ip" oif "$interface" $protocol sport "$port" ct state established accept
+		fi
+	done
+}
