@@ -38,7 +38,8 @@ flush()
 #  11. (Optional) Enable SYNPROXY (requires kernel module support)
 #  12. Create a custom chain for port scanning detection
 # -----------------------------------------------------------------------------
-prerouting_security() {
+prerouting_security()
+{
 	local wan="$1"
 
 	# Drop invalid connection states
@@ -197,7 +198,8 @@ port_knocking()
 	add rule inet filter input jump $chain
 }
 
-input() {
+input()
+{
 	local iface="$1"
 	local ip="$2"
 	local port="$3"
@@ -206,7 +208,7 @@ input() {
 	local IFS=' 	
 '
 	if [[ ! -z "$mac" ]]; then
-		local mac_match="ether saddr $mac"
+		local mac="ether saddr $mac"
 	fi
 
 	for interface in $iface; do
@@ -227,9 +229,48 @@ input() {
 
 		if [[ $input_iface == "$interface" ]]; then
 			# INPUT rule
-			nft add rule inet filter input ip saddr "$input_ip" ip daddr "$iface_ip" iif "$interface" $protocol dport "$port" $mac_match ct state new,established accept
+			nft add rule inet filter input ip saddr "$input_ip" ip daddr "$iface_ip" iif "$interface" $protocol dport "$port" $mac ct state new,established accept
 			# OUTPUT rule
 			nft add rule inet filter output ip saddr "$iface_ip" ip daddr "$input_ip" oif "$interface" $protocol sport "$port" ct state established accept
+		fi
+	done
+}
+
+output()
+{
+	local iface="$1"
+	local ip="$2"
+	local port="$3"
+	local protocol="$4"
+	local mac="$5"
+	local IFS=' 	
+'
+	if [ ! -z "$5" ]; then
+		local mac_match="ether saddr $mac"
+	fi
+
+	for interface in $iface; do
+		if [[ $ip == *':'* ]]; then
+			local output_iface="${ip%%:*}"
+			local output_ip="${ip#*:}"
+		else
+			local output_iface="$interface"
+			local output_ip="$ip"
+		fi
+
+		if [[ $interface =~ [0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3} ]]; then
+			local iface_ip=$interface
+			local interface=$output_iface
+		else
+			local iface_ip="$(ip address show $interface | grep -oP '(?<=inet ).*(?=/)' | cut -d ' ' -f1)"
+		fi
+
+		if [[ $output_iface == $interface ]]; then
+
+			nft add rule inet filter input iif "$interface" ip saddr "$output_ip" ip daddr "$iface_ip" $mac ip protocol "$protocol" sport "$port" ct state established,related accept
+
+			nft add rule inet filter output oif "$interface" ip saddr "$iface_ip" ip daddr "$output_ip" ip protocol "$protocol" dport "$port" ct state new,established,related accept
+
 		fi
 	done
 }
