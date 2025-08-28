@@ -35,7 +35,10 @@ for arg in $@; do
 		*.conf) [[ "$v" ]] && echo "$arg"
 			source "$arg";;
 		-) tmpfile=$(mktemp); cat > "$tmpfile"; source "$tmpfile"; rm -f "$tmpfile";;
-		-v|--verbose) v=1; [[ $# == 1 ]] && usage ;;
-		-h|--help|*) usage;;
+		-f|--fast) f=1; [[ $# == 1 ]] && usage;;
+		-v|--verbose) v=1; [[ $# == 1 ]] && usage;;
+		*) plugin="$script_dir/../share/harmony/plugins/$arg"; shift; [[ -f "$plugin" ]] && source "$plugin" "$@" || usage;;
+		-h|--help) usage;;
+
 	esac
 done

@@ -1,6 +1,20 @@
 #!/bin/bash
 # Description: plugin for iptables
 # Dependencies: iptables
+
+plugin_help()
+{
+	cat <<EOF
+Functions:
+
+   flush	flush all iptables rules
+
+EOF
+
+
+
+}
+
 flush()
 {
 	iptables -F
@@ -205,7 +219,7 @@ default_lo()
 input()
 {
 	local iface="$1"
-	local ip="$2"
+	local client="$2"
 	local port="$3"
 	local protocol="$4"
 	local IFS=' 	
@@ -215,36 +229,22 @@ input()
 		local mac="-m mac --mac-source $5"
 	fi
 
-	for interface in $iface; do
-		# Allows multiple ifaces to be specified as long as you use the ip like eth0:192.168.1.2
-		if [[ $ip == *':'* ]]; then
-			local input_iface="${ip%%:*}"
-			local input_ip="${ip#*:}"
-		else
-			local input_iface="$interface"
-			local input_ip="$ip"
-		fi
+	local iface_ip="$(ip address show $iface | grep -oP '(?<=inet ).*(?=/)' | cut -d " " -f1)"
 
-		if [[ $interface =~ [0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3} ]]; then
-			local iface_ip="$interface"
-			local interface="$input_iface"
-		else
-			local iface_ip="$(ip address show $interface | grep -oP '(?<=inet ).*(?=/)' | cut -d " " -f1)"
-		fi
-
-		if [[ $input_iface == $interface ]]; then
-
-			_filter_rules+="-A INPUT  -i $interface -p $protocol --dport $port -s $input_ip -d $iface_ip $mac -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT"$'\n'
-			_filter_rules+="-A OUTPUT -o $interface -p $protocol --sport $port -d $input_ip -s $iface_ip -m state --state ESTABLISHED,RELATED -j ACCEPT"$'\n'
-		fi
-	done
+	if [[ $f ]]; then
+		_filter_rules+="-A INPUT  -i $iface -p $protocol --dport $port -s $client -d $iface_ip $mac -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT"$'\n'
+		_filter_rules+="-A OUTPUT -o $iface -p $protocol --sport $port -d $client -s $iface_ip -m state --state ESTABLISHED,RELATED -j ACCEPT"$'\n'
+	else
+		iptables -A INPUT  -i $iface -p $protocol --dport $port -s $client -d $iface_ip $mac -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
+		iptables -A OUTPUT -o $iface -p $protocol --sport $port -d $client -s $iface_ip -m state --state ESTABLISHED,RELATED -j ACCEPT
+	fi
 }
 
-# This allows the router to connect to other servers from any interface
+# This allows the router to connect to other servers from a specific interface
 output()
 {
 	local iface="$1"
-	local ip="$2"
+	local host="$2"
 	local port="$3"
 	local protocol="$4"
 	local IFS=' 	
@@ -253,32 +253,15 @@ output()
 		local mac="-m mac --mac-source $5"
 	fi
 
-	for interface in $iface; do
-		# Allows multiple ifaces to be specified as long as you use the ip like eth0:192.168.1.2
-		if [[ $ip == *':'* ]]; then
-			local output_iface="${ip%%:*}"
-			local output_ip="${ip#*:}"
-		else
-			local output_iface="$interface"
-			local output_ip="$ip"
-		fi
+	local iface_ip="$(ip address show $iface | grep -oP '(?<=inet ).*(?=/)' | cut -d " " -f1)"
 
-
-		if [[ $interface =~ [0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3} ]]; then
-			local iface_ip=$interface
-			local interface=$output_iface
-		else
-			local iface_ip="$(ip address show $interface | grep -oP '(?<=inet ).*(?=/)' | cut -d " " -f1)"
-		fi
-
-
-		if [[ $output_iface == $interface ]]; then
-
-			_filter_rules+="-A INPUT  -i $interface -p $protocol --sport $port -s $output_ip -d $iface_ip $mac -m state --state ESTABLISHED,RELATED -j ACCEPT"$'\n'
-			_filter_rules+="-A OUTPUT -o $interface -p $protocol --dport $port -d $output_ip -s $iface_ip -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT"$'\n'
-
-		fi
-	done
+	if [[ $f ]]; then
+		_filter_rules+="-A INPUT  -i $iface -p $protocol --sport $port -s $ip -d $iface_ip $mac -m state --state ESTABLISHED,RELATED -j ACCEPT"$'\n'
+		_filter_rules+="-A OUTPUT -o $iface -p $protocol --dport $port -d $ip -s $iface_ip -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT"$'\n'
+	else
+		iptables -A INPUT  -i $iface -p $protocol --sport $port -s $host -d $iface_ip $mac -m state --state ESTABLISHED,RELATED -j ACCEPT
+		iptables -A OUTPUT -o $iface -p $protocol --dport $port -d $host -s $iface_ip -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
+	fi
 }
 
 # This allows lan clients to use the internet
@@ -296,24 +279,19 @@ forward()
 		local mac="-m mac --mac-source $7"
 	fi
 
-	for interface in $src_iface; do
-		# Allows multiple ifaces to be specified as long as you use the ip like eth0:192.168.1.2
-		if [[ $src_ip == *':'* ]]; then
-			local src_iface_1="${ip%%:*}"
-			local src_ip_1="${ip#*:}"
-		else
-			local src_iface_1="$interface"
-			local src_ip_1="$src_ip"
-		fi
+	if [[ $f ]]; then
+		_filter_rules+="-A FORWARD -i $src_iface -p $protocol -m $protocol --dport $dst_port -s $src_ip -d $dst_ip $mac -j ACCEPT"$'\n'
+		_filter_rules+="-A FORWARD -i $dst_iface -p $protocol -m $protocol --sport $dst_port -d $src_ip -s $dst_ip -j ACCEPT"$'\n'
+		#iptables -t nat -A POSTROUTING -o $dst_iface -j MASQUERADE
+		_nat_rules+="-A POSTROUTING -o $dst_iface -p $protocol -m $protocol --dport $dst_port -s $src_ip -d $dst_ip -j MASQUERADE"$'\n'
+		_nat_rules+="-A POSTROUTING -o $dst_iface -p $protocol -m $protocol --sport $dst_port -d $src_ip -s $dst_ip -j MASQUERADE"$'\n'
+	else
+		iptables -A FORWARD -i $src_iface -p $protocol -m $protocol --dport $dst_port -s $src_ip -d $dst_ip $mac -j ACCEPT
+		iptables -A FORWARD -i $dst_iface -p $protocol -m $protocol --sport $dst_port -d $src_ip -s $dst_ip -j ACCEPT
+		iptables -t nat -A POSTROUTING -o $dst_iface -p $protocol -m $protocol --dport $dst_port -s $src_ip -d $dst_ip -j MASQUERADE
+		iptables -t nat -A POSTROUTING -o $dst_iface -p $protocol -m $protocol --sport $dst_port -d $src_ip -s $dst_ip -j MASQUERADE
+	fi
 
-		if [[ $src_iface_1 == $interface ]]; then
-			_filter_rules+="-A FORWARD -i $src_iface_1 -p $protocol -m $protocol --dport $dst_port -s $src_ip_1 -d $dst_ip $mac -j ACCEPT"$'\n'
-			_filter_rules+="-A FORWARD -i $dst_iface   -p $protocol -m $protocol --sport $dst_port -d $src_ip_1 -s $dst_ip -j ACCEPT"$'\n'
-			#iptables -t nat -A POSTROUTING -o $dst_iface -j MASQUERADE
-			_nat_rules+="-A POSTROUTING -o $dst_iface -p $protocol -m $protocol --dport $dst_port -s $src_ip_1 -d $dst_ip -j MASQUERADE"$'\n'
-			_nat_rules+="-A POSTROUTING -o $dst_iface -p $protocol -m $protocol --sport $dst_port -d $src_ip_1 -s $dst_ip -j MASQUERADE"$'\n'
-		fi
-	done
 }
 
 # This allows which user and group can connect to what service
@@ -322,49 +300,33 @@ acl()
 	local iface="$1"
 	#[[ "$2" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}(/([0-9]|[12][0-9]|3[0-2]))?$ ]] && local ip="$2" || local ip="$(getent ahosts $2 | awk '{print $1}' | sort -u | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}')"
 	#[[ "$3" =~ ^[0-9]+(:[0-9]+)?$ ]] && local port="$3" || port="$(getent services $3 | awk '{split($2, a, "/"); print a[1]}')"
-	local ip="$2"
+	local host="$2"
 	local port="$3"
 	local user_group="$4"
 	local protocol="$5"
 	local IFS=' 	
 '
-	for interface in $iface; do
-		# Allows multiple ifaces to be specified as long as you use the ip like eth0:192.168.1.2
-		if [[ $ip == *':'* ]]; then
-			local acl_iface="${ip%%:*}"
-			local acl_ip="${ip#*:}"
-		else
-			local acl_iface="$interface"
-			local acl_ip="$ip"
-		fi
+	local iface_ip="$(ip address show $iface | grep -oP '(?<=inet ).*(?=/)' | cut -d " " -f1)"
 
-		if [[ $acl_iface == $interface ]]; then
-
-			if [[ $interface == *':'* ]]; then
-				local interface="${interface%%:*}"
-				local iface_ip="${acl_iface#*:}"
-			else
-				local iface_ip="$(ip address show $interface | grep -oP '(?<=inet ).*(?=/)' | cut -d " " -f1)"
-			fi
-
-			local user="${user_group%%:*}"
-			local group="${user_group#*:}"
+	local user="${user_group%%:*}"
+	local group="${user_group#*:}"
 
 
-			if [ ! -z $user ]; then
-				user="-m owner --uid-owner $user"
-			fi
+	if [ ! -z $user ]; then
+		user="-m owner --uid-owner $user"
+	fi
 
-			if [ ! -z $group ]; then
-				group="-m owner --gid-owner $group"
-			fi
+	if [ ! -z $group ]; then
+		group="-m owner --gid-owner $group"
+	fi
 
-			for host in $acl_ip; do
-				_filter_rules+="-A OUTPUT -o $interface -p $protocol -m $protocol --dport $port -s $iface_ip -d $host $user $group -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT"$'\n'
-				_filter_rules+="-A INPUT  -i $interface -p $protocol -m $protocol --sport $port -d $iface_ip -s $host -m state --state ESTABLISHED,RELATED -j ACCEPT"$'\n'
-			done
-		fi
-	done
+	if [[ $f ]]; then
+		_filter_rules+="-A OUTPUT -o $iface -p $protocol -m $protocol --dport $port -s $iface_ip -d $host $user $group -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT"$'\n'
+		_filter_rules+="-A INPUT  -i $iface -p $protocol -m $protocol --sport $port -d $iface_ip -s $host -m state --state ESTABLISHED,RELATED -j ACCEPT"$'\n'
+	else
+		iptables -A OUTPUT -o $iface -p $protocol -m $protocol --dport $port -s $iface_ip -d $host $user $group -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
+		iptables -A INPUT  -i $iface -p $protocol -m $protocol --sport $port -d $iface_ip -s $host -m state --state ESTABLISHED,RELATED -j ACCEPT
+	fi
 }
 
 ### LO NOTES
@@ -428,12 +390,14 @@ acl_lo()
 
 apply()
 {
-	local filter="$(iptables-save | awk '/\*filter/{flag=1} /COMMIT/{flag=0} flag')"
-	local mangle="$(iptables-save | awk '/\*mangle/{flag=1} /COMMIT/{flag=0} flag')"
-	local nat="$(iptables-save | awk '/\*nat/{flag=1} /COMMIT/{flag=0} flag')"
-	local raw="$(iptables-save | awk '/\*raw/{flag=1} /COMMIT/{flag=0} flag')"
 
-	iptables-restore << _EOF
+	if [[ $f ]]; then
+		local filter="$(iptables-save | awk '/\*filter/{flag=1} /COMMIT/{flag=0} flag')"
+		local mangle="$(iptables-save | awk '/\*mangle/{flag=1} /COMMIT/{flag=0} flag')"
+		local nat="$(iptables-save | awk '/\*nat/{flag=1} /COMMIT/{flag=0} flag')"
+		local raw="$(iptables-save | awk '/\*raw/{flag=1} /COMMIT/{flag=0} flag')"
+
+		iptables-restore << _EOF
 $filter
 $_filter_rules
 COMMIT
@@ -445,7 +409,7 @@ COMMIT
 $raw
 COMMIT
 _EOF
-
+	fi
 }
 
 save()
@@ -455,3 +419,14 @@ save()
 	# openrc
 	[[ $(which rc-service 2>/dev/null) ]] && rc-service iptables save
 }
+
+# Only run if the file is being sourced *with arguments*
+if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
+	if [[ $# -gt 0 ]]; then
+		for arg in "$@"; do
+			case "$arg" in
+				--help) plugin_help; exit 0;;
+			esac
+		done
+	fi
+fi
